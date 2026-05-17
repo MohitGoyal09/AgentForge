@@ -5,6 +5,7 @@ from client.llm_client import LLMClient
 from config.config import Config
 from config.loader import get_data_dir
 from context.manager import ContextManager
+from tools.discovery import ToolDiscoveryManager
 from tools.registry import create_default_registery
 
 
@@ -13,11 +14,17 @@ class Session:
         self.config = config
         self.client = LLMClient(config=config)
         self.tool_registry = create_default_registery(config=config)
-        self.context_manager: ContextManager | None = ContextManager(config=config , user_memory=self._load_memory())
+        self.context_manager: ContextManager | None = ContextManager(config=config, user_memory=self._load_memory(), tools=self.tool_registry.get_tools())
 
+        self.discovery_manager = ToolDiscoveryManager(
+            self.config,
+            self.tool_registry
+        )
         self.session_id = str(uuid.uuid4())
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
+
+        self.discovery_manager.discover_all()
 
         self._turn_count = 0
 
