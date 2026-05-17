@@ -1,2 +1,14 @@
 [model]
 name = "minimax/minimax-m2.5:free"
+
+[[subagents]]
+name = "code-explainer"
+description = "Explains how specific code works in detail"
+goal_prompt = """You are a code explanation specialist.
+Your job is to read code files and explain how they work in clear, plain language.
+Focus on: data flow, key functions, design patterns, and anything non-obvious.
+Use read_file to examine code. Do NOT modify any files.
+Be thorough but concise."""
+allowed_tools = ["read_file", "glob", "list_dir"]
+max_turns = 10
+timeout_seconds = 120

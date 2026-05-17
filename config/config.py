@@ -18,6 +18,15 @@ class ModelConfig(BaseModel):
     context_window: int = 256_000
     
 
+class SubagentConfig(BaseModel):
+    name: str = Field(..., description="Unique name for the subagent (used as subagent_<name>)")
+    description: str = Field(..., description="What this subagent does")
+    goal_prompt: str = Field(..., description="System prompt that defines the subagent's role and behavior")
+    allowed_tools: list[str] | None = Field(None, description="Tools the subagent can use. If None, inherits from parent")
+    max_turns: int = Field(20, ge=1, le=100, description="Maximum turns before the subagent auto-terminates")
+    timeout_seconds: float = Field(600, ge=10, description="Maximum execution time in seconds")
+
+
 class Config(BaseModel):
     model : ModelConfig = Field(default_factory=ModelConfig)
     cwd : Path = Field(decimal_factory = Path.cwd)
@@ -31,6 +40,9 @@ class Config(BaseModel):
     user_instructions: str | None = None
 
     debug: bool = False
+
+    allowed_tools : list[str] | None = Field(None , description="If Set , only these tools will be available to the agent")
+    subagents: list[SubagentConfig] = Field(default_factory=list, description="User-defined subagents")
 
     @property
     def api_key(self) -> str | None:
