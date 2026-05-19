@@ -2,6 +2,7 @@ from __future__ import annotations
 from enum import Enum
 import os
 from pathlib import Path
+from pickle import NONE
 from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
@@ -26,11 +27,43 @@ class SubagentConfig(BaseModel):
     max_turns: int = Field(20, ge=1, le=100, description="Maximum turns before the subagent auto-terminates")
     timeout_seconds: float = Field(600, ge=10, description="Maximum execution time in seconds")
 
+class MCPServerConfig(BaseModel):
+    enabled : bool = True
+    startup_timeout_sec : float = 10
+
+    #stdio transport
+    command : str | None = None
+    args : list[str] = Field(default_factory=list)
+    env : dict[str , str] = Field(default_factory=dict)
+    cwd : Path | None = None
+
+    # http/see transport
+    url : str | None = None
+
+    @model_validator(mode='after')
+    def validate_transport(self) -> MCPServerConfig:
+        has_command = self.command is not None
+        has_url = self.url is not None
+
+        if not has_command and not has_url:
+            raise ValueError(
+                "MCP Server must have either 'command' (stdio) or 'url' (http/sse)"
+            )
+
+        if has_command and has_url:
+            raise ValueError(
+                "MCP Server cannot have both 'command' (stdio) and 'url' (http/sse)"
+            )
+        return self
+
+
+
 
 class Config(BaseModel):
     model : ModelConfig = Field(default_factory=ModelConfig)
     cwd : Path = Field(decimal_factory = Path.cwd)
     shell_environment : ShellEnvironmentPolicy = Field(default_factory=ShellEnvironmentPolicy)
+    mcp_servers : dict[str , MCPServerConfig] = Field(default_factory=dict)
 
 
     max_turns : int = 100

@@ -12,3 +12,7 @@ Be thorough but concise."""
 allowed_tools = ["read_file", "glob", "list_dir"]
 max_turns = 10
 timeout_seconds = 120
+
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem","/Users/mohit/Code/claudecode", "/tmp"]
