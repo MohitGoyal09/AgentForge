@@ -36,6 +36,17 @@ class Agent:
             self.session.increment_turn()
             response_text = ""
 
+            # check for context overflow
+            if self.session.context_manager.needs_compression():
+                summary , usage = self.session.chat_compactor.compress(
+                    self.session.context_manager
+                )
+
+                if summary :
+                    self.session.context_manager.replace_with_summary(summary)
+                    self.session.context_manager.set_latest_usage(usage)
+                    self.session.context_manager.add_usage(usage)
+                    
             tool_schemas = self.session.tool_registry.get_schemas()
 
             tool_calls: list[ToolCall] = []
@@ -60,6 +71,7 @@ class Agent:
                 elif event.type == StreamEventType.MESSAGE_COMPLETE:
                     usage = event.token_usage
 
+
             self.session.context_manager.add_assistant_message(
                 response_text or None,
                 (
@@ -80,6 +92,11 @@ class Agent:
             )
 
             if not tool_calls:
+                if usage:
+                    self.session.context_manager.set_latest_usage(usage)
+                    self.session.context_manager.add_usage(usage)
+
+                self.session.context_manager.prune_tool_outputs()
                 return
 
             tool_call_results: list[ToolResultMessage] = []
@@ -116,6 +133,11 @@ class Agent:
                     tool_result.tool_call_id,
                     tool_result.content,
                 )
+            if usage:
+                    self.session.context_manager.set_latest_usage(usage)
+                    self.session.context_manager.add_usage(usage)
+                    
+            self.session.context_manager.prune_tool_outputs()
 
         yield AgentEvent.agents_error(f"Maximum turns ({max_turns}) reached")
 
