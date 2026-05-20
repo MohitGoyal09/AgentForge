@@ -67,17 +67,17 @@ class HookSystem:
         error: Exception | None = None,
     ) -> dict[str, str]:
         env = os.environ.copy()
-        env["AI_AGENT_TRIGGER"] = trigger.value
-        env["AI_AGENT_CWD"] = str(self.config.cwd)
+        env["AGENTFORGE_TRIGGER"] = trigger.value
+        env["AGENTFORGE_CWD"] = str(self.config.cwd)
 
         if tool_name:
-            env["AI_AGENT_TOOL_NAME"] = tool_name
+            env["AGENTFORGE_TOOL_NAME"] = tool_name
 
         if user_message:
-            env["AI_AGENT_USER_MESSAGE"] = user_message
+            env["AGENTFORGE_USER_MESSAGE"] = user_message
 
         if error:
-            env["AI_AGENT_ERROR"] = str(error)
+            env["AGENTFORGE_ERROR"] = str(error)
 
         return env
 
@@ -100,7 +100,7 @@ class HookSystem:
             HookTrigger.AFTER_AGENT,
             user_message=user_message,
         )
-        env["AI_AGENT_RESPONSE"] = agent_response
+        env["AGENTFORGE_RESPONSE"] = agent_response
 
         for hook in self.hooks:
             if hook.trigger == HookTrigger.AFTER_AGENT:
@@ -112,7 +112,7 @@ class HookSystem:
         tool_params: dict[str, Any],
     ) -> None:
         env = self._build_env(HookTrigger.BEFORE_TOOL, tool_name=tool_name)
-        env["AI_AGENT_TOOL_PARAMS"] = json.dumps(tool_params)
+        env["AGENTFORGE_TOOL_PARAMS"] = json.dumps(tool_params)
 
         for hook in self.hooks:
             if hook.trigger == HookTrigger.BEFORE_TOOL:
@@ -125,8 +125,8 @@ class HookSystem:
         tool_result: ToolResult,
     ) -> None:
         env = self._build_env(HookTrigger.AFTER_TOOL, tool_name=tool_name)
-        env["AI_AGENT_TOOL_PARAMS"] = json.dumps(tool_params)
-        env["AI_AGENT_TOOL_RESULT"] = tool_result.to_model_output()
+        env["AGENTFORGE_TOOL_PARAMS"] = json.dumps(tool_params)
+        env["AGENTFORGE_TOOL_RESULT"] = tool_result.to_model_output()
 
         for hook in self.hooks:
             if hook.trigger == HookTrigger.AFTER_TOOL:

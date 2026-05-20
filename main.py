@@ -26,7 +26,7 @@ class CLI:
 
     async def run_interactive(self) -> str | None:
         self.tui.print_welcome(
-            "AI Agent",
+            "AgentForge",
             lines=[
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",

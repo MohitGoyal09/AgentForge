@@ -45,7 +45,7 @@ class ToolDiscoveryManager:
 
 
     def discover_from_directory(self, directory : Path) -> None:
-        tool_dir = directory / '.ai-agent' / 'tools'
+        tool_dir = directory / '.agentforge' / 'tools'
 
         if not tool_dir.exists() or not tool_dir.is_dir():
             return
@@ -71,5 +71,4 @@ class ToolDiscoveryManager:
     def discover_all(self) -> None:
         self.discover_from_directory(self.config.cwd)
         self.discover_from_directory(get_config_dir())
-
 

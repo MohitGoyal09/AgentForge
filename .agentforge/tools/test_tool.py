@@ -10,7 +10,7 @@ class TestTool(Tool):
     name = "test_tool"
     description = (
         "A test tool that echoes back the input message. "
-        "This tool is discovered from .unified_agent/tool/test_tool.py"
+        "This tool is discovered from .agentforge/tools/test_tool.py"
     )
     kind = ToolKind.READ
     schema = TestToolParams
@@ -20,6 +20,6 @@ class TestTool(Tool):
         message = params.message
 
         output = f"Test tool received: {message}\n"
-        output += "Tool was discovered from: .ai-agent/tool/test_tool.py"
+        output += "Tool was discovered from: .agentforge/tools/test_tool.py"
 
         return ToolResult.success_result(output)

@@ -7,11 +7,11 @@ from datetime import datetime
 
 
 def main():
-    trigger = os.environ.get("AI_AGENT_TRIGGER")
-    cwd = os.environ.get("AI_AGENT_CWD")
-    tool_name = os.environ.get("AI_AGENT_TOOL_NAME")
-    user_message = os.environ.get("AI_AGENT_USER_MESSAGE")
-    error = os.environ.get("AI_AGENT_ERROR")
+    trigger = os.environ.get("AGENTFORGE_TRIGGER")
+    cwd = os.environ.get("AGENTFORGE_CWD")
+    tool_name = os.environ.get("AGENTFORGE_TOOL_NAME")
+    user_message = os.environ.get("AGENTFORGE_USER_MESSAGE")
+    error = os.environ.get("AGENTFORGE_ERROR")
 
     log_data = {
         "timestamp": datetime.now().isoformat(),
@@ -22,7 +22,7 @@ def main():
         "error": error,
     }
 
-    log_path = os.path.expanduser("/Users/mohit/code/claudecode/hook.log")
+    log_path = os.path.join(cwd or os.getcwd(), "hook.log")
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a") as f:
         f.write(f"[HOOK] {json.dumps(log_data)}\n")
