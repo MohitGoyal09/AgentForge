@@ -82,7 +82,7 @@ class ContextManager:
     
     def needs_compression(self) -> bool:
 
-        context_limit = self.config.modle.context_window
+        context_limit = self.config.model.context_window
         current_tokens = self._latest_usage.total_tokens
 
         return current_tokens > context_limit
@@ -91,7 +91,7 @@ class ContextManager:
         self._latest_usage = usage
 
     def add_usage(self, usage: TokenUsage):
-        self.total_usage += usage
+        self._total_usage += usage
     
     def replace_with_summary(self, summary: str) -> None:
         self._messages = []

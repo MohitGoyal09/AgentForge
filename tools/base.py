@@ -3,7 +3,7 @@ import abc
 from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from enum import Enum
 
@@ -88,6 +88,11 @@ class ToolConfirmation(BaseModel):
     tool_name: str
     params: dict[str, Any]
     description: str
+
+    diff : FileDiff | None = None
+    affected_paths : list[Path] = field(default_factory=list)
+    command : str | None = None
+    is_dangerous : bool = False
 
 
 class Tool(abc.ABC):

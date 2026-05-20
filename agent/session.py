@@ -6,6 +6,7 @@ from config.config import Config
 from config.loader import get_data_dir
 from context.compaction import ChatCompactor
 from context.manager import ContextManager
+from safety.approval import ApprovalManager
 from tools.discovery import ToolDiscoveryManager
 from tools.mcp.mcp_manager import MCPManager
 from tools.registry import create_default_registery
@@ -22,6 +23,7 @@ class Session:
             self.tool_registry
         )
         self.mcp_manager = MCPManager(self.config)
+        self.approval_manager = ApprovalManager(self.config.approval , self.config.cwd)
         self.chat_compactor = ChatCompactor(client=self.client)
         self.session_id = str(uuid.uuid4())
         self.created_at = datetime.now()

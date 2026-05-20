@@ -56,8 +56,12 @@ class MCPServerConfig(BaseModel):
             )
         return self
 
-
-
+class ApprovalPolicy(str , Enum):
+    ON_REQUEST = "on-request"
+    ON_FAILURE = "on-failure"
+    AUTO = "auto"
+    AUTO_EDIT = "never"
+    YOLO = "yolo"
 
 class Config(BaseModel):
     model : ModelConfig = Field(default_factory=ModelConfig)
@@ -65,7 +69,7 @@ class Config(BaseModel):
     shell_environment : ShellEnvironmentPolicy = Field(default_factory=ShellEnvironmentPolicy)
     mcp_servers : dict[str , MCPServerConfig] = Field(default_factory=dict)
 
-
+    approval: ApprovalPolicy = ApprovalPolicy.ON_REQUEST
     max_turns : int = 100
     max_tool_output_tokens : int = 50_000
 

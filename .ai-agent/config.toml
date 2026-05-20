@@ -1,5 +1,5 @@
 [model]
-name = "minimax/minimax-m2.5:free"
+name = "deepseek/deepseek-v4-flash:free"
 
 [[subagents]]
 name = "code-explainer"
@@ -15,4 +15,10 @@ timeout_seconds = 120
 
 [mcp_servers.filesystem]
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem","/Users/mohit/Code/claudecode", "/tmp"]
+args = [
+  "-y",
+  "@modelcontextprotocol/server-filesystem",
+  "/Users/mohit/Code/claudecode",
+  "/Users/mohit/Desktop",
+  "/tmp",
+]
