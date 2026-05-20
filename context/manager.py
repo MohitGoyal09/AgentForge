@@ -149,31 +149,34 @@ I'll continue with the REMAINING tasks only, starting from where we left off."""
         if user_message_count < 2 :
             return 0
         
-        total_tokens = 0
+        protected_tokens = 0
+        pruned_tokens = 0
         to_prune : list[MessageItem]= []
         for msg in reversed(self._messages):
             if msg.role == 'tool' and msg.tool_call_id:
                 if msg.pruned_at:
-                    break
+                    continue
 
                 tokens = msg.token_count or count_tokens(msg.content , self._model_name)
-                total_tokens += tokens
+                if protected_tokens < self.PRUNE_PROTECT_TOKENS:
+                    protected_tokens += tokens
+                    continue
 
-                if total_tokens > self.PRUNE_PROTECT_TOKENS:
-                    pruned_tokens += tokens
-                    to_prune.append(msg)
-            if pruned_tokens < self.PRUNE_MINIMUM_TOKENS:
-                return 0
-            
-            pruned_count = 0
+                pruned_tokens += tokens
+                to_prune.append(msg)
 
-            for msg in to_prune:
-                msg.content ="[Old tool result content cleared]"
-                msg.token_count = count_tokens(msg.content , self._model_name)
-                msg.pruned_at = datetime.now()
-                pruned_count +=1
+        if pruned_tokens < self.PRUNE_MINIMUM_TOKENS:
+            return 0
+        
+        pruned_count = 0
 
-            return pruned_count
+        for msg in to_prune:
+            msg.content ="[Old tool result content cleared]"
+            msg.token_count = count_tokens(msg.content , self._model_name)
+            msg.pruned_at = datetime.now()
+            pruned_count +=1
+
+        return pruned_count
     
     def clear(self) -> None:
         self._messages = []
@@ -181,4 +184,3 @@ I'll continue with the REMAINING tasks only, starting from where we left off."""
 
 
     
-

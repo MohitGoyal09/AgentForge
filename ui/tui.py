@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 from typing import Any
 from rich.console import Console
 from rich.theme import Theme
@@ -237,11 +238,136 @@ class TUI:
         }.get(suffix, "text")
 
     def print_welcome(self, title: str, lines: list[str]) -> None:
-        body = "\n".join(lines)
+        table = Table.grid(padding=(0, 2))
+        table.add_column(style="muted", no_wrap=True)
+        table.add_column(style="code", overflow="fold")
+
+        for line in lines:
+            if ":" in line:
+                key, value = line.split(":", 1)
+                table.add_row(key.strip(), value.strip())
+            else:
+                table.add_row("", line)
+
         self.console.print(
             Panel(
-                Text(body, style="code"),
+                table,
                 title=Text(title, style="highlight"),
+                title_align="left",
+                subtitle=Text("type /help for commands", style="muted"),
+                subtitle_align="right",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
+    def show_notice(self, message: str, title: str = "Status") -> None:
+        self.console.print(
+            Panel(
+                Text(message, style="code"),
+                title=Text(title, style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(0, 2),
+            )
+        )
+
+    def show_error(self, message: str, title: str = "Error") -> None:
+        self.console.print(
+            Panel(
+                Text(message, style="error"),
+                title=Text(title, style="error"),
+                title_align="left",
+                border_style="error",
+                box=box.ROUNDED,
+                padding=(0, 2),
+            )
+        )
+
+    def show_config(self, config: dict[str, Any]) -> None:
+        body = json.dumps(config, indent=2)
+        self.console.print(
+            Panel(
+                Syntax(body, "json", theme="monokai", word_wrap=True),
+                title=Text("Configuration", style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
+    def show_tools(self, tools: list[Any]) -> None:
+        table = Table(
+            box=box.SIMPLE,
+            show_header=True,
+            header_style="highlight",
+            expand=True,
+        )
+        table.add_column("Tool", style="tool", no_wrap=True)
+        table.add_column("Kind", style="muted", no_wrap=True)
+        table.add_column("Description", style="code", overflow="fold")
+
+        for tool in sorted(tools, key=lambda item: (item.kind.value, item.name)):
+            description = tool.description
+            if len(description) > 120:
+                description = description[:117] + "..."
+            table.add_row(tool.name, tool.kind.value, description)
+
+        self.console.print(
+            Panel(
+                table if tools else Text("No tools registered", style="muted"),
+                title=Text("Tools", style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
+    def show_mcp_servers(self, servers: list[dict[str, Any]]) -> None:
+        table = Table(
+            box=box.SIMPLE,
+            show_header=True,
+            header_style="highlight",
+            expand=True,
+        )
+        table.add_column("Server", style="tool.mcp", no_wrap=True)
+        table.add_column("Status", style="code", no_wrap=True)
+        table.add_column("Tools", style="muted", justify="right")
+
+        for server in servers:
+            table.add_row(
+                str(server.get("name", "")),
+                str(server.get("status", "")),
+                str(server.get("tools", 0)),
+            )
+
+        self.console.print(
+            Panel(
+                table if servers else Text("No MCP servers configured", style="muted"),
+                title=Text("MCP Servers", style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
+    def show_stats(self, stats: dict[str, Any]) -> None:
+        table = Table.grid(padding=(0, 2))
+        table.add_column(style="muted", no_wrap=True)
+        table.add_column(style="code", justify="right")
+
+        for key, value in stats.items():
+            table.add_row(key.replace("_", " "), str(value))
+
+        self.console.print(
+            Panel(
+                table,
+                title=Text("Session Stats", style="highlight"),
                 title_align="left",
                 border_style="border",
                 box=box.ROUNDED,
@@ -610,6 +736,9 @@ class TUI:
 - `/stats` - Show session statistics
 - `/tools` - List available tools
 - `/mcp` - Show MCP server status
+
+## Planned
+
 - `/save` - Save current session
 - `/checkpoint [name]` - Create a checkpoint
 - `/checkpoints` - List available checkpoints

@@ -128,11 +128,11 @@ class ShellTool(Tool):
            )
         except asyncio.TimeoutError:
             if sys.platform != "win32":
-                os.killpg(os.getpgid(process.id) , signal.SIGILL)
+                os.killpg(os.getpgid(process.pid) , signal.SIGKILL)
             else:
                 process.kill()
             await process.wait()
-            return ToolResult.error_result(f"Command timed out after {process.timeout}s")
+            return ToolResult.error_result(f"Command timed out after {params.timeout}s")
         
         stdout = stdout_data.decode("utf-8" , errors='replace')
         stderr = stderr_data.decode("utf-8" , errors = "replace")

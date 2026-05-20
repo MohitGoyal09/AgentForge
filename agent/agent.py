@@ -5,7 +5,6 @@ from agent.events import AgentEvent, AgentEventType
 from agent.session import Session
 from client.response import StreamEventType, TokenUsage, ToolCall, ToolResultMessage
 from config.config import Config
-from prompts.system import create_loop_breaker_prompt
 from tools.base import ToolConfirmation
 
 
@@ -16,7 +15,7 @@ class Agent:
         self.session.approval_manager.confirmation_callback = confirmation_callback
 
     async def run(self, message: str):
-
+        await self.session.hook_system.trigger_before_agent(message)
         yield AgentEvent.agents_start(message)
         self.session.context_manager.add_user_message(message)
 
@@ -27,7 +26,7 @@ class Agent:
 
             if event.type == AgentEventType.TEXT_COMPLETE:
                 final_response = event.data.get("content")
-
+        await self.session.hook_system.trigger_after_agent(message, final_response or "")
         yield AgentEvent.agents_end(final_response)
 
     async def _agentic_loop(self) -> AsyncGenerator[AgentEvent, None]:
@@ -39,14 +38,15 @@ class Agent:
 
             # check for context overflow
             if self.session.context_manager.needs_compression():
-                summary , usage = self.session.chat_compactor.compress(
+                summary , usage = await self.session.chat_compactor.compress(
                     self.session.context_manager
                 )
 
                 if summary :
                     self.session.context_manager.replace_with_summary(summary)
-                    self.session.context_manager.set_latest_usage(usage)
-                    self.session.context_manager.add_usage(usage)
+                    if usage:
+                        self.session.context_manager.set_latest_usage(usage)
+                        self.session.context_manager.add_usage(usage)
                     
             tool_schemas = self.session.tool_registry.get_schemas()
 
@@ -69,6 +69,7 @@ class Agent:
                     yield AgentEvent.agents_error(
                         event.error or "Unknown error occurred.",
                     )
+                    return
                 elif event.type == StreamEventType.MESSAGE_COMPLETE:
                     usage = event.token_usage
 
@@ -92,6 +93,8 @@ class Agent:
                 ),
             )
 
+            yield AgentEvent.text_complete(response_text)
+
             if not tool_calls:
                 if usage:
                     self.session.context_manager.set_latest_usage(usage)
@@ -113,6 +116,7 @@ class Agent:
                     tool_call.name,
                     tool_call.arguments,
                     self.config.cwd,
+                    self.session.hook_system,
                     self.session.approval_manager,
                 )
 

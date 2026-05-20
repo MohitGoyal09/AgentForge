@@ -4,7 +4,7 @@ import click
 from typing import Any
 import sys
 from agent.events import AgentEventType
-from config.config import Config
+from config.config import ApprovalPolicy, Config
 from config.loader import load_config
 from ui.tui import TUI, get_console
 from pathlib import Path
@@ -28,9 +28,10 @@ class CLI:
         self.tui.print_welcome(
             "AI Agent",
             lines=[
-                f"{self.config.model_name}",
+                f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
-                "commands: /help /config /approval /model /exit",
+                f"approval: {self.config.approval.value}",
+                "commands: /help /tools /mcp /stats /exit",
             ],
         )
 
@@ -42,6 +43,11 @@ class CLI:
                     user_input = console.input("\n[user]>[/user] ").strip()
                     if not user_input:
                         continue
+                    if user_input.startswith("/"):
+                        should_continue = self._handle_command(user_input)
+                        if not should_continue:
+                            break
+                        continue
                     await self._process_message(user_input)
 
                 except KeyboardInterrupt:
@@ -52,10 +58,92 @@ class CLI:
         return
 
     def _get_tool_kind(self, tool_name: str) -> str | None:
+        if not self.agent or not self.agent.session:
+            return None
         tool = self.agent.session.tool_registry.get(tool_name)
         if not tool:
             return None
         return tool.kind.value
+
+    def _handle_command(self, command: str) -> bool:
+        parts = command.split(maxsplit=1)
+        name = parts[0].lower()
+        argument = parts[1].strip() if len(parts) > 1 else ""
+
+        if name in {"/exit", "/quit"}:
+            return False
+        if name == "/help":
+            self.tui.show_help()
+            return True
+        if name == "/clear":
+            if self.agent and self.agent.session.context_manager:
+                self.agent.session.context_manager.clear()
+            self.tui.show_notice("Conversation history cleared")
+            return True
+        if name == "/config":
+            self.tui.show_config(self._redact_config(self.config.to_dict()))
+            return True
+        if name == "/model":
+            if not argument:
+                self.tui.show_notice(f"Current model: {self.config.model_name}", "Model")
+            else:
+                self.config.model_name = argument
+                self.tui.show_notice(f"Model set to: {self.config.model_name}", "Model")
+            return True
+        if name == "/approval":
+            if not argument:
+                modes = ", ".join(policy.value for policy in ApprovalPolicy)
+                self.tui.show_notice(
+                    f"Current approval: {self.config.approval.value}\nModes: {modes}",
+                    "Approval",
+                )
+                return True
+            try:
+                self.config.approval = ApprovalPolicy(argument)
+                if self.agent:
+                    self.agent.session.approval_manager.approval_policy = self.config.approval
+                self.tui.show_notice(f"Approval set to: {self.config.approval.value}", "Approval")
+            except ValueError:
+                self.tui.show_error(f"Unknown approval mode: {argument}")
+            return True
+        if name == "/tools":
+            if self.agent:
+                self.tui.show_tools(self.agent.session.tool_registry.get_tools())
+            return True
+        if name == "/mcp":
+            if self.agent:
+                self.tui.show_mcp_servers(self.agent.session.mcp_manager.get_all_servers())
+            return True
+        if name == "/stats":
+            if self.agent:
+                usage = self.agent.session.context_manager._total_usage
+                self.tui.show_stats(
+                    {
+                        "turns": self.agent.session._turn_count,
+                        "prompt_tokens": usage.prompt_tokens,
+                        "completion_tokens": usage.completion_tokens,
+                        "total_tokens": usage.total_tokens,
+                        "cached_tokens": usage.cached_tokens,
+                    }
+                )
+            return True
+
+        self.tui.show_error(f"Unknown command: {name}\nRun /help to see available commands.")
+        return True
+
+    def _redact_config(self, value: Any) -> Any:
+        secret_markers = ("key", "token", "secret", "password")
+        if isinstance(value, dict):
+            redacted = {}
+            for key, item in value.items():
+                if any(marker in key.lower() for marker in secret_markers):
+                    redacted[key] = "[redacted]"
+                else:
+                    redacted[key] = self._redact_config(item)
+            return redacted
+        if isinstance(value, list):
+            return [self._redact_config(item) for item in value]
+        return value
 
     async def _process_message(self, message: str) -> str | None:
         if not self.agent:
@@ -105,6 +193,7 @@ class CLI:
                     metadata,
                     truncated=event.data.get("truncated", False),
                     diff=diff,
+                    exit_code=event.data.get("exit_code"),
                 )
         return final_response
 
@@ -127,6 +216,7 @@ def main(prompt: str | None, cwd: Path | None):
         config = load_config(cwd)
     except Exception as e:
         console.print(f"[error]Configuration Error : {e}[/error]")
+        sys.exit(1)
 
     errors = config.validate()
 
@@ -145,5 +235,5 @@ def main(prompt: str | None, cwd: Path | None):
     else:
         asyncio.run(cli.run_interactive())
 
-
-main()
+if __name__ == "__main__":
+    main()

@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from platformdirs import user_config_dir, user_data_dir
+from dotenv import load_dotenv
 import tomli
 
 from config.config import Config
@@ -75,6 +76,8 @@ def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
 
 def load_config(cwd: Path | None) -> Config:
     cwd = cwd or Path.cwd()
+    load_dotenv(cwd / ".env")
+    load_dotenv()
 
     system_path = get_system_config_path()
 

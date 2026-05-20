@@ -44,7 +44,9 @@ class WebSearchTool(Tool):
 
         output_lines = [f"Search results for: {params.query}"]
 
-        for i, result in enumerate(results, start=1):
+        limited_results = list(results)[: params.max_results]
+
+        for i, result in enumerate(limited_results, start=1):
             output_lines.append(f"{i}. Title: {result['title']}")
             output_lines.append(f"   URL: {result['href']}")
             if result.get("body"):
@@ -55,6 +57,6 @@ class WebSearchTool(Tool):
         return ToolResult.success_result(
             "\n".join(output_lines),
             metadata={
-                "results": len(results),
+                "results": len(limited_results),
             },
         )

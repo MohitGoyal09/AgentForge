@@ -1,3 +1,5 @@
+hooks_enabled = true
+
 [model]
 name = "deepseek/deepseek-v4-flash:free"
 
@@ -12,6 +14,16 @@ Be thorough but concise."""
 allowed_tools = ["read_file", "glob", "list_dir"]
 max_turns = 10
 timeout_seconds = 120
+
+[[hooks]]
+name='test_before_tool'
+trigger='before_tool'
+command='python3 ./scripts/test_tool.py'
+
+[[hooks]]
+name='test_before_agent'
+trigger='before_agent'
+command='python3 ./scripts/test_tool.py'
 
 [mcp_servers.filesystem]
 command = "npx"

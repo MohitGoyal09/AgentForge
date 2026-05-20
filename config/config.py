@@ -2,7 +2,6 @@ from __future__ import annotations
 from enum import Enum
 import os
 from pathlib import Path
-from pickle import NONE
 from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
@@ -60,14 +59,38 @@ class ApprovalPolicy(str , Enum):
     ON_REQUEST = "on-request"
     ON_FAILURE = "on-failure"
     AUTO = "auto"
-    AUTO_EDIT = "never"
+    AUTO_EDIT = "auto-edit"
+    NEVER = "never"
     YOLO = "yolo"
+
+class HookTrigger(str, Enum):
+    BEFORE_AGENT = "before_agent"
+    AFTER_AGENT = "after_agent"
+    BEFORE_TOOL = "before_tool"
+    AFTER_TOOL = "after_tool"
+    ON_ERROR = "on_error"
+
+class HookConfig(BaseModel):
+    name : str
+    trigger : HookTrigger
+    command : str | None = None
+    script : str | None = None
+    timeout_sec : float = 30
+    enabled : bool = True
+
+    @model_validator(mode="after")
+    def validate_hook(self) -> HookConfig:
+        if not self.command and not self.script:
+            raise ValueError("Hook must either have 'command' or 'script'")
+        return self
 
 class Config(BaseModel):
     model : ModelConfig = Field(default_factory=ModelConfig)
-    cwd : Path = Field(decimal_factory = Path.cwd)
+    cwd : Path = Field(default_factory=Path.cwd)
     shell_environment : ShellEnvironmentPolicy = Field(default_factory=ShellEnvironmentPolicy)
     mcp_servers : dict[str , MCPServerConfig] = Field(default_factory=dict)
+    hooks_enabled : bool = False
+    hooks : list[HookConfig] = Field(default_factory=list)
 
     approval: ApprovalPolicy = ApprovalPolicy.ON_REQUEST
     max_turns : int = 100
@@ -83,11 +106,11 @@ class Config(BaseModel):
 
     @property
     def api_key(self) -> str | None:
-        return os.environ.get("API_KEY")
+        return os.environ.get("API_KEY") or os.environ.get("OPENROUTER_API_KEY")
 
     @property
     def base_url(self) -> str | None:
-        return os.environ.get("BASE_URL")
+        return os.environ.get("BASE_URL") or os.environ.get("OPENROUTER_BASE_URL")
 
     @property
     def model_name(self) -> str:
@@ -102,14 +125,14 @@ class Config(BaseModel):
         return self.model.temperature
 
     @temperature.setter
-    def temperature(self, value: str) -> None:
+    def temperature(self, value: float) -> None:
         self.model.temperature = value
 
     def validate(self) -> list[str]:
         errors: list[str] = []
 
         if not self.api_key:
-            errors.append("No API key found. Set API_KEY environment variable")
+            errors.append("No API key found. Set API_KEY or OPENROUTER_API_KEY environment variable")
 
         if not self.cwd.exists():
             errors.append(f"Working directory does not exist: {self.cwd}")
@@ -118,4 +141,3 @@ class Config(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
-

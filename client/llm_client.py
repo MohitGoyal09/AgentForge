@@ -42,6 +42,10 @@ class LLMClient:
             for tool in tools
         ]
 
+    def _cached_tokens(self, usage: Any) -> int:
+        details = getattr(usage, "prompt_tokens_details", None)
+        return getattr(details, "cached_tokens", 0) or 0
+
     async def chat_completion(
         self, 
         messages: list[dict[str, Any]], 
@@ -56,6 +60,9 @@ class LLMClient:
                     "messages": messages,
                     "stream": stream,
         }
+
+        if stream:
+            kwargs["stream_options"] = {"include_usage": True}
         
         if tools:
             kwargs["tools"] = self._build_tools(tools)
@@ -119,7 +126,7 @@ class LLMClient:
                     prompt_tokens = chunk.usage.prompt_tokens,
                     completion_tokens = chunk.usage.completion_tokens,
                     total_tokens = chunk.usage.total_tokens,
-                    cached_tokens = chunk.usage.prompt_tokens_details.cached_tokens,
+                    cached_tokens = self._cached_tokens(chunk.usage),
                 )
             
             if not chunk.choices:
@@ -194,12 +201,15 @@ class LLMClient:
        tool_calls: list[ToolCall] = []
        if message.tool_calls:
           for tc in message.tool_calls:
-            tool_calls.append(
-                ToolCall(
-                    call_id = tc.id,
-                    name = tc.function.name,
-                    arguments=parse_tool_call_arguments(tc.function.arguments)
+            tool_call = ToolCall(
+                call_id = tc.id,
+                name = tc.function.name,
+                arguments=parse_tool_call_arguments(tc.function.arguments)
                 )
+            tool_calls.append(tool_call)
+            yield StreamEvent(
+                type=StreamEventType.TOOL_CALL_COMPLETE,
+                tool_call=tool_call,
             )
 
 
@@ -209,12 +219,12 @@ class LLMClient:
             prompt_tokens = response.usage.prompt_tokens,
             completion_tokens = response.usage.completion_tokens,
             total_tokens = response.usage.total_tokens,
-            cached_tokens = response.usage.prompt_tokens_details.cached_tokens,
+            cached_tokens = self._cached_tokens(response.usage),
           )
        
        yield StreamEvent(
         type = StreamEventType.MESSAGE_COMPLETE , 
         text_delta = text_delta , 
-        finish_reason = choice.finish, 
+        finish_reason = choice.finish_reason, 
         token_usage = usage)
        
