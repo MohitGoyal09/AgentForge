@@ -3,7 +3,10 @@ from typing import Any
 
 from platformdirs import user_config_dir, user_data_dir
 from dotenv import load_dotenv
-import tomli
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+    import tomli as tomllib
 
 from config.config import Config
 from utils.errors import ConfigError
@@ -30,12 +33,12 @@ def get_system_config_path() -> Path:
 def _parse_toml(path: Path):
     try:
         with open(path, "rb") as f:
-            return tomli.load(f)
-    except tomli.TOMLDecodeError as e:
-        raise ConfigError("Invalid TOML in {path}: {e}", config_file=str(path)) from e
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(f"Invalid TOML in {path}: {e}", config_file=str(path)) from e
     except (OSError, IOError) as e:
         raise ConfigError(
-            "Failed to read config file {path}: {e}", config_file=str(path)
+            f"Failed to read config file {path}: {e}", config_file=str(path)
         ) from e
 
 
@@ -95,7 +98,7 @@ def load_config(cwd: Path | None) -> Config:
             project_config_dict = _parse_toml(project_path)
             config_dict = _merge_dicts(config_dict, project_config_dict)
         except ConfigError:
-            logger.warning(f"Skipping invalid system config: {system_path}")
+            logger.warning(f"Skipping invalid project config: {project_path}")
 
     if "cwd" not in config_dict:
         config_dict["cwd"] = cwd
