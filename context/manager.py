@@ -30,6 +30,28 @@ class MessageItem:
 
         return result
 
+    def to_snapshot_dict(self) -> dict[str, Any]:
+        return {
+            "role": self.role,
+            "content": self.content,
+            "tool_call_id": self.tool_call_id,
+            "tool_calls": self.tool_calls,
+            "token_count": self.token_count,
+            "pruned_at": self.pruned_at.isoformat() if self.pruned_at else None,
+        }
+
+    @classmethod
+    def from_snapshot_dict(cls, data: dict[str, Any]) -> MessageItem:
+        pruned_at = data.get("pruned_at")
+        return cls(
+            role=data["role"],
+            content=data.get("content", ""),
+            tool_call_id=data.get("tool_call_id"),
+            tool_calls=data.get("tool_calls", []),
+            token_count=data.get("token_count"),
+            pruned_at=datetime.fromisoformat(pruned_at) if pruned_at else None,
+        )
+
 
 class ContextManager:
     PRUNE_PROTECT_TOKENS = 40_000
@@ -52,7 +74,7 @@ class ContextManager:
         self._messages.append(item)
 
     def add_assistant_message(
-        self, content: str, tool_calls: list[dict[str, any]]
+        self, content: str, tool_calls: list[dict[str, Any]]
     ) -> None:
         item = MessageItem(
             role="assistant",
@@ -180,6 +202,22 @@ I'll continue with the REMAINING tasks only, starting from where we left off."""
     
     def clear(self) -> None:
         self._messages = []
+
+    def snapshot_messages(self) -> list[dict[str, Any]]:
+        return [message.to_snapshot_dict() for message in self._messages]
+
+    def restore_messages(self, messages: list[dict[str, Any]]) -> None:
+        self._messages = [MessageItem.from_snapshot_dict(message) for message in messages]
+
+    def get_latest_usage(self) -> TokenUsage:
+        return self._latest_usage
+
+    def get_total_usage(self) -> TokenUsage:
+        return self._total_usage
+
+    def restore_usage(self, latest_usage: TokenUsage, total_usage: TokenUsage) -> None:
+        self._latest_usage = latest_usage
+        self._total_usage = total_usage
 
 
 

@@ -375,6 +375,72 @@ class TUI:
             )
         )
 
+    def show_sessions(self, sessions: list[dict[str, Any]]) -> None:
+        table = Table(
+            box=box.SIMPLE,
+            show_header=True,
+            header_style="highlight",
+            expand=True,
+        )
+        table.add_column("Session", style="code", overflow="fold")
+        table.add_column("Updated", style="muted", no_wrap=True)
+        table.add_column("Turns", style="code", justify="right")
+        table.add_column("Mode", style="muted", no_wrap=True)
+        table.add_column("CWD", style="code", overflow="fold")
+
+        for session in sessions:
+            table.add_row(
+                str(session.get("session_id", "")),
+                str(session.get("updated_at", "")),
+                str(session.get("turn_count", 0)),
+                str(session.get("mode", "")),
+                str(session.get("cwd", "")),
+            )
+
+        self.console.print(
+            Panel(
+                table if sessions else Text("No saved sessions", style="muted"),
+                title=Text("Saved Sessions", style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
+    def show_checkpoints(self, checkpoints: list[dict[str, Any]]) -> None:
+        table = Table(
+            box=box.SIMPLE,
+            show_header=True,
+            header_style="highlight",
+            expand=True,
+        )
+        table.add_column("Checkpoint", style="code", overflow="fold")
+        table.add_column("Session", style="muted", overflow="fold")
+        table.add_column("Turns", style="code", justify="right")
+        table.add_column("Mode", style="muted", no_wrap=True)
+        table.add_column("CWD", style="code", overflow="fold")
+
+        for checkpoint in checkpoints:
+            table.add_row(
+                str(checkpoint.get("checkpoint_id", "")),
+                str(checkpoint.get("session_id", "")),
+                str(checkpoint.get("turn_count", 0)),
+                str(checkpoint.get("mode", "")),
+                str(checkpoint.get("cwd", "")),
+            )
+
+        self.console.print(
+            Panel(
+                table if checkpoints else Text("No checkpoints", style="muted"),
+                title=Text("Checkpoints", style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
     def tool_call_complete(
         self,
         call_id: str,
@@ -736,11 +802,8 @@ class TUI:
 - `/stats` - Show session statistics
 - `/tools` - List available tools
 - `/mcp` - Show MCP server status
-
-## Planned
-
 - `/save` - Save current session
-- `/checkpoint [name]` - Create a checkpoint
+- `/checkpoint` - Create a checkpoint
 - `/checkpoints` - List available checkpoints
 - `/restore <checkpoint_id>` - Restore a checkpoint
 - `/sessions` - List saved sessions

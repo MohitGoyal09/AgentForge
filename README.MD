@@ -2,7 +2,7 @@
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
-The project currently supports streaming model responses, typed tool calls, approval gates, hooks, MCP tools, subagents, context compaction, persistent memory, and a Rich terminal UI. The next major learning milestones are progressive-disclosure skills, transcript/replay, checkpoints, plan/build modes, and read-only swarm orchestration.
+The project currently supports streaming model responses, typed tool calls, approval gates, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, and a Rich terminal UI. The next major learning milestones are progressive-disclosure skills, deterministic replay, plan/build modes, and read-only swarm orchestration.
 
 ## Purpose
 
@@ -21,7 +21,7 @@ The main concepts explored here are:
 | MCP integration | How external tool servers are exposed to the model |
 | Subagents | How a parent agent delegates bounded specialist work |
 | Skills | How task-specific guidance can be loaded progressively without bloating context |
-| Checkpoints and replay | How future versions can recover, debug, and rerun sessions deterministically |
+| Persistence and replay | How snapshots, event logs, and checkpoints make sessions recoverable and debuggable |
 
 ## Architecture
 
@@ -44,6 +44,7 @@ flowchart TB
     approvals["Approval Manager<br/>safety/approval.py"]
     hooks["Hook System<br/>hooks/hook_system.py"]
     compaction["Chat Compactor<br/>context/compaction.py"]
+    persistence["Persistence Manager<br/>agent/persistence.py"]
     subagents["Subagent Tools<br/>tools/subagents.py"]
 
     user --> cli
@@ -58,6 +59,7 @@ flowchart TB
     session --> approvals
     session --> hooks
     session --> compaction
+    session --> persistence
     registry --> tools
     registry --> subagents
     mcp --> registry
@@ -144,6 +146,7 @@ agentforge/
 |-- agent/
 |   |-- agent.py               # Core ReAct-style agent loop
 |   |-- events.py              # Agent lifecycle and streaming events
+|   |-- persistence.py         # Session snapshots, checkpoints, and event logs
 |   `-- session.py             # Session wiring for client, tools, context, hooks
 |-- client/
 |   |-- llm_client.py          # OpenAI-compatible streaming/non-streaming client
@@ -154,7 +157,7 @@ agentforge/
 |-- context/
 |   |-- manager.py             # Message history, pruning, prompt assembly
 |   |-- compaction.py          # Summary-based context compaction
-|   `-- loop_detector.py       # Work-in-progress loop detection
+|   `-- loop_detector.py       # Repeated action and cycle detection
 |-- hooks/
 |   `-- hook_system.py         # Before/after agent/tool hooks
 |-- prompts/
@@ -204,9 +207,11 @@ This is a hybrid ReAct/function-calling loop: the model reasons in natural langu
 - `ApprovalManager`
 - `HookSystem`
 - `ChatCompactor`
+- `LoopDetector`
+- `PersistenceManager`
 - session ID and turn count
 
-The session is the right place to add future persistent transcript state, active mode state, selected skills, and checkpoint metadata.
+The session owns snapshot creation and restoration. It captures conversation messages, token usage, config metadata, active tools, MCP server names, todos, and event sequence state. Mode state and active skills are represented in the snapshot schema, but the actual skill loader and mode controller are still planned.
 
 ### Tools
 
@@ -459,7 +464,7 @@ The first useful version:
 
 The orchestrator can spawn multiple read-only agents with different goals, then merge findings.
 
-Write-capable swarm mode should wait until checkpoints, file ownership, cancellation, and transcript persistence are in place.
+Write-capable swarm mode should wait until workspace rollback, file ownership, cancellation, and deterministic replay are in place.
 
 ## Skills Roadmap
 
@@ -505,43 +510,81 @@ Only load full skill text when selected.
 Only load reference files when the skill asks for them.
 ```
 
-## Checkpoints and Replay Roadmap
+## Persistence, Checkpoints, and Replay
 
-The next major reliability layer should be transcript persistence.
+AgentForge now has a first version of transcript persistence. The implementation lives in `agent/persistence.py` and is wired through `agent/session.py` and the interactive commands in `main.py`.
 
-Every agent event should be written to JSONL:
+Persistence is split into three surfaces:
+
+| Surface | Status | Purpose |
+| --- | --- | --- |
+| Session snapshot | implemented | Resume an interactive session after saving |
+| Event log | implemented | Inspect what happened during a run |
+| Checkpoint | implemented | Restore chat/context state to a saved point |
+| Deterministic replay | planned | Re-run a recorded trace without calling the model |
+| Workspace rollback | planned | Restore file state, not only chat/context state |
+
+### Session Snapshots
+
+Snapshots are stored under the platform data directory for `agentforge` in `sessions/`.
+
+Each snapshot stores:
+
+- schema version
+- session ID
+- created/updated timestamps
+- turn count
+- working directory
+- redacted config snapshot
+- message history with tool call metadata
+- latest and total token usage
+- active tool names
+- MCP server names
+- todo state
+- event sequence
+- mode placeholder
+
+Snapshot writes are atomic and saved files are restricted to owner-only permissions.
+
+### Event Logs
+
+Every agent event handled by the CLI is appended to JSONL under `events/`.
 
 ```json
 {
+  "schema_version": 1,
   "session_id": "uuid",
   "turn": 3,
-  "type": "tool_result",
+  "sequence": 42,
+  "type": "tool_call_complete",
   "timestamp": "2026-05-21T12:00:00Z",
   "payload": {}
 }
 ```
 
-Once transcript persistence exists, implement:
+This is the foundation for replay, debugging, evals, and UI trace inspection.
 
-| Feature | Why It Matters |
-| --- | --- |
-| Session resume | Continue after process crash |
-| Trace replay | Debug UI and event flow without calling the model |
-| Deterministic replay | Test harness behavior with recorded model outputs |
-| Checkpoints | Restore chat and workspace state |
-| Evals | Measure whether harness changes improve reliability |
+### Checkpoints
 
-Checkpoint state should include:
+Checkpoints are currently session snapshots stored under `checkpoints/`. They restore chat/context state, usage, todos, and session metadata.
+
+Current checkpoint state includes:
 
 - message history
-- compaction summary
-- active skills
-- todos
 - token usage
-- config snapshot
-- approval mode
+- redacted config snapshot
 - working directory
-- changed-file snapshots or git diff
+- active tools and MCP server names
+- todos
+- event sequence
+
+Still planned:
+
+- changed-file snapshots
+- git diff capture
+- checkpoint reasons, such as manual, before mutating tool, or before dangerous command
+- workspace restore
+- deterministic replay from event logs
 
 ## Configuration
 
@@ -628,11 +671,12 @@ Interactive commands:
 | `/tools` | implemented | Show registered tools |
 | `/mcp` | implemented | Show MCP server status |
 | `/stats` | implemented | Show token/session stats |
-| `/save` | planned | Save current session |
-| `/checkpoint` | planned | Create checkpoint |
-| `/restore` | planned | Restore checkpoint |
-| `/sessions` | planned | List saved sessions |
-| `/resume` | planned | Resume saved session |
+| `/save` | implemented | Save current session snapshot |
+| `/checkpoint` | implemented | Create checkpoint from current session |
+| `/restore <checkpoint_id>` | implemented | Restore checkpoint state |
+| `/checkpoints` | implemented | List saved checkpoints |
+| `/sessions` | implemented | List saved sessions |
+| `/resume <session_id>` | implemented | Resume saved session |
 | `/plan` | planned | Switch to plan mode |
 | `/build` | planned | Switch to build mode |
 | `/swarm` | planned | Run swarm orchestration |
@@ -650,7 +694,7 @@ pip install -r requirements.txt
 Compile-check the codebase:
 
 ```bash
-python3 -m compileall -q agent client config context hooks safety tools ui utils main.py
+python3 -m compileall -q agent client config context hooks prompts safety tools ui utils main.py scripts
 ```
 
 Run a focused syntax check:
@@ -674,19 +718,23 @@ tests/
 
 ## Learning Roadmap
 
-Recommended implementation order:
+Completed foundation:
 
 1. Stabilize current loop, hooks, tools, config, and TUI.
 2. Add transcript persistence.
-3. Add deterministic replay.
-4. Finish loop detector.
-5. Add structured tool observations.
-6. Add progressive-disclosure skills.
-7. Add checkpoints.
-8. Add plan/build modes.
-9. Add read-only swarm mode.
-10. Add eval harness.
-11. Add write-capable swarm mode with file ownership.
+3. Integrate loop detector.
+4. Add session checkpoints.
+
+Recommended next implementation order:
+
+1. Add deterministic replay from event logs.
+2. Add structured tool observations.
+3. Add progressive-disclosure skills.
+4. Add plan/build modes.
+5. Add read-only swarm mode.
+6. Add eval harness.
+7. Add workspace rollback for checkpoints.
+8. Add write-capable swarm mode with file ownership.
 
 ## Current Status
 
@@ -705,18 +753,21 @@ Implemented:
 - Context manager
 - Compaction scaffolding
 - Persistent user memory
+- Loop detector integration
+- Session snapshots
+- Event JSONL logs
+- Checkpoints
+- Resume and restore commands
 
 In progress or planned:
 
-- Loop detector integration
-- Transcript persistence
 - Deterministic replay
 - Progressive-disclosure skills
-- Checkpoints
 - Plan/build modes
 - Swarm mode
 - Structured tool observation contract
 - Eval harness
+- Workspace rollback for checkpoints
 
 ## Design Principles
 

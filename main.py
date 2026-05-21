@@ -114,9 +114,61 @@ class CLI:
             if self.agent:
                 self.tui.show_mcp_servers(self.agent.session.mcp_manager.get_all_servers())
             return True
+        if name == "/save":
+            if self.agent:
+                self.agent.session.save_session()
+                self.tui.show_notice(f"Saved session: {self.agent.session.session_id}")
+            return True
+        if name == "/sessions":
+            if self.agent:
+                self.tui.show_sessions(self.agent.session.persistence.list_sessions())
+            return True
+        if name == "/resume":
+            if not self.agent:
+                return True
+            if not argument:
+                self.tui.show_error("Usage: /resume <session_id>")
+                return True
+            try:
+                snapshot = self.agent.session.persistence.load_session(argument)
+            except ValueError as e:
+                self.tui.show_error(str(e))
+                return True
+            if not snapshot:
+                self.tui.show_error(f"Session not found: {argument}")
+                return True
+            self.agent.session.restore_snapshot(snapshot)
+            self.tui.show_notice(f"Resumed session: {snapshot.session_id}")
+            return True
+        if name == "/checkpoint":
+            if self.agent:
+                checkpoint_id = self.agent.session.save_checkpoint()
+                self.tui.show_notice(f"Created checkpoint: {checkpoint_id}")
+            return True
+        if name == "/checkpoints":
+            if self.agent:
+                self.tui.show_checkpoints(self.agent.session.persistence.list_checkpoints())
+            return True
+        if name == "/restore":
+            if not self.agent:
+                return True
+            if not argument:
+                self.tui.show_error("Usage: /restore <checkpoint_id>")
+                return True
+            try:
+                snapshot = self.agent.session.persistence.load_checkpoint(argument)
+            except ValueError as e:
+                self.tui.show_error(str(e))
+                return True
+            if not snapshot:
+                self.tui.show_error(f"Checkpoint not found: {argument}")
+                return True
+            self.agent.session.restore_snapshot(snapshot)
+            self.tui.show_notice(f"Restored checkpoint: {argument}")
+            return True
         if name == "/stats":
             if self.agent:
-                usage = self.agent.session.context_manager._total_usage
+                usage = self.agent.session.context_manager.get_total_usage()
                 self.tui.show_stats(
                     {
                         "turns": self.agent.session._turn_count,
@@ -153,6 +205,8 @@ class CLI:
         final_response: str | None = None
 
         async for event in self.agent.run(message):
+            self.agent.session.record_event(event.type.value, event.data)
+
             if event.type == AgentEventType.TEXT_DELTA:
                 content = event.data.get("content", "")
                 if not assistant_streaming:
@@ -195,6 +249,8 @@ class CLI:
                     diff=diff,
                     exit_code=event.data.get("exit_code"),
                 )
+
+        self.agent.session.save_session()
         return final_response
 
 
