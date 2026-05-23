@@ -32,12 +32,24 @@ class SubagentTool(Tool):
 
     @property
     def description(self) -> str:
-        return f"subagent_{self.definition.description}"
+        return f"Run the {self.definition.name} subagent: {self.definition.description}"
 
     schema = SubagentParams
 
     def is_mutating(self, params: dict[str, Any]) -> bool:
-        return True
+        if self.definition.allowed_tools is None:
+            return True
+
+        mutating_tools = {
+            "edit",
+            "write_file",
+            "shell",
+            "web_search",
+            "web_fetch",
+            "memory",
+            "todos",
+        }
+        return any(tool_name in mutating_tools for tool_name in self.definition.allowed_tools)
     
     async def execute(self, invocation: ToolInvocation) -> ToolResult:
         from agent.agent import Agent
@@ -126,6 +138,72 @@ class SubagentTool(Tool):
 
 
 
+EXPLORE = SubagentDefinition(
+    name="explore",
+    description="Maps unfamiliar code and finds the files, symbols, and patterns relevant to a task",
+    goal_prompt="""You are a codebase exploration specialist.
+Your job is to quickly map unfamiliar code and identify the most relevant files, symbols, data flow, and architectural patterns.
+Return concise findings with file paths and short reasons why each file matters.
+Use read_file, grep, glob, and list_dir to investigate.
+Do NOT modify any files.""",
+    allowed_tools=["read_file", "grep", "glob", "list_dir"],
+    max_turns=12,
+    timeout_seconds=300,
+)
+
+DEBUGGER = SubagentDefinition(
+    name="debugger",
+    description="Investigates likely root causes for bugs without changing files",
+    goal_prompt="""You are a debugging specialist.
+Your job is to trace symptoms to likely root causes using the codebase evidence available to you.
+Prefer concrete file/function references, explain the failure path, and suggest the smallest safe fix.
+Use read_file, grep, glob, and list_dir to investigate.
+Do NOT modify any files.""",
+    allowed_tools=["read_file", "grep", "glob", "list_dir"],
+    max_turns=14,
+    timeout_seconds=360,
+)
+
+CODE_REVIEWER = SubagentDefinition(
+    name="code_reviewer",
+    description="Reviews code changes and provides feedback on quality, bugs, and improvements",
+    goal_prompt="""You are a code review specialist.
+Your job is to review code and provide constructive feedback.
+Look for bugs, code smells, security issues, and improvement opportunities.
+Lead with concrete findings grounded in file paths and behavior.
+Use read_file, list_dir, glob, and grep to examine the code.
+Do NOT modify any files.""",
+    allowed_tools=["read_file", "grep", "glob", "list_dir"],
+    max_turns=10,
+    timeout_seconds=300,
+)
+
+TEST_PLANNER = SubagentDefinition(
+    name="test_planner",
+    description="Designs focused verification plans for a change",
+    goal_prompt="""You are a test planning specialist.
+Your job is to inspect the codebase and propose the smallest useful verification plan for the requested change.
+Identify existing test commands, risky paths, missing coverage, and a practical smoke-test sequence.
+Use read_file, grep, glob, and list_dir to investigate.
+Do NOT modify any files.""",
+    allowed_tools=["read_file", "grep", "glob", "list_dir"],
+    max_turns=10,
+    timeout_seconds=300,
+)
+
+ARCHITECT = SubagentDefinition(
+    name="architect",
+    description="Explains architecture boundaries and suggests design-level changes",
+    goal_prompt="""You are an architecture analysis specialist.
+Your job is to explain module boundaries, ownership, data flow, and design trade-offs.
+Focus on how a proposed change fits the existing architecture and where the harness contract should live.
+Use read_file, grep, glob, and list_dir to investigate.
+Do NOT modify any files.""",
+    allowed_tools=["read_file", "grep", "glob", "list_dir"],
+    max_turns=12,
+    timeout_seconds=300,
+)
+
 CODEBASE_INVESTIGATOR = SubagentDefinition(
     name="codebase_investigator",
     description="Investigates the codebase to answer questions about code structure, patterns, and implementations",
@@ -136,22 +214,13 @@ Do NOT modify any files.""",
     allowed_tools=["read_file", "grep", "glob", "list_dir"],
 )
 
-CODE_REVIEWER = SubagentDefinition(
-    name="code_reviewer",
-    description="Reviews code changes and provides feedback on quality, bugs, and improvements",
-    goal_prompt="""You are a code review specialist.
-Your job is to review code and provide constructive feedback.
-Look for bugs, code smells, security issues, and improvement opportunities.
-Use read_file, list_dir and grep to examine the code.
-Do NOT modify any files.""",
-    allowed_tools=["read_file", "grep", "list_dir"],
-    max_turns=10,
-    timeout_seconds=300,
-)
-
 
 def get_default_subagent_definitions() -> list[SubagentDefinition]:
     return [
+        EXPLORE,
+        DEBUGGER,
         CODEBASE_INVESTIGATOR,
         CODE_REVIEWER,
+        TEST_PLANNER,
+        ARCHITECT,
     ]

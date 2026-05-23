@@ -233,6 +233,7 @@ Built-in tools include:
 | `read_file` | read | Read text files with line numbers |
 | `write_file` | write | Create or overwrite files |
 | `edit` | write | Replace exact text in files |
+| `apply_patch` | write | Apply a unified diff across one or more files |
 | `shell` | shell | Run shell commands with timeout and approval |
 | `list_dir` | read | List directory entries |
 | `grep` | read | Search file contents with regex |
@@ -368,9 +369,15 @@ Subagents are specialist agents exposed as tools.
 
 Current examples:
 
+- `subagent_explore`
+- `subagent_debugger`
 - `subagent_codebase_investigator`
 - `subagent_code_reviewer`
+- `subagent_test_planner`
+- `subagent_architect`
 - project-defined subagents from config
+
+The built-in subagents are read-only by default. They can inspect files, grep, glob, and list directories, but they do not edit files. This makes them useful for safe delegation before adding full swarm orchestration.
 
 Subagents are useful for bounded delegation:
 

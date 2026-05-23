@@ -29,6 +29,7 @@ class ReadFileTool(Tool):
     name = "read_file"
     description = (
         "Read the contents of a text file. Returns the file content with line numbers. "
+        "Also reports whether the file has a trailing newline, which matters when creating patches. "
         "For large files, use offset and limit to read specific portions. "
         "Cannot read binary files (images, executables, etc.)."
     )
@@ -75,12 +76,14 @@ class ReadFileTool(Tool):
 
             lines = content.splitlines()
             total_lines = len(lines)
+            has_trailing_newline = content.endswith(("\n", "\r"))
 
             if total_lines == 0:
                 return ToolResult.success_result(
                     "File is empty.",
                     metadata={
                         "lines": 0,
+                        "has_trailing_newline": has_trailing_newline,
                     },
                 )
 
@@ -115,6 +118,8 @@ class ReadFileTool(Tool):
                 metadata_lines.append(
                     f"Showing lines {start_idx+1}-{end_idx} of {total_lines}"
                 )
+            if end_idx == total_lines and not has_trailing_newline:
+                metadata_lines.append("No trailing newline at end of file")
 
             if metadata_lines:
                 header = " | ".join(metadata_lines) + "\n\n"
@@ -128,6 +133,7 @@ class ReadFileTool(Tool):
                     "total_lines": total_lines,
                     "shown_start": start_idx + 1,
                     "shown_end": end_idx,
+                    "has_trailing_newline": has_trailing_newline,
                 },
             )
         except Exception as e:
@@ -135,4 +141,3 @@ class ReadFileTool(Tool):
 
         
         
-

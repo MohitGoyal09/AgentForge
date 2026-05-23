@@ -1,7 +1,7 @@
 hooks_enabled = true
 
 [model]
-name = "deepseek/deepseek-v4-flash:free"
+name = "nvidia/nemotron-3-super-120b-a12b:free"
 
 [[subagents]]
 name = "code-explainer"

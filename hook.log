@@ -1,1 +1,35 @@
 [HOOK] {"timestamp": "2026-05-21T11:16:12.557808", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "hi", "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:23:46.153433", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "use patch tool", "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:25:44.470362", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "use patch tool", "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:25:52.866795", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "list_dir", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:26:04.540767", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "glob", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:26:10.428070", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "glob", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:26:16.466624", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "glob", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:26:42.671875", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:26:53.438742", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "write_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:26:56.818642", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "write_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:27:04.608205", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "apply_patch", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:27:16.990073", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:28:07.780044", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "write_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:28:32.604782", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "apply_patch", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:30:45.103740", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:30:50.313182", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "write_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:30:59.914179", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "write_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:31:29.074169", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "apply_patch", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:33:58.595638", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "write_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:41:42.677658", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "i want you to add things aobut ai agents in example.txt file using patch tool", "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:41:47.616040", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:44:57.563714", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "i want you to add things aobut ai agents in example.txt file using patch tool", "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:45:17.434627", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:46:35.101186", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "apply_patch", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:47:05.566500", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "apply_patch", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:47:27.621353", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "apply_patch", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:48:11.414596", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "shell", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:48:19.497768", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:49:24.026688", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:50:30.007911", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "apply_patch", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:58:42.327073", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "i want you to add things aobut ai agents in example.txt file using patch tool", "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:58:50.812445", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "list_dir", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:58:52.951074", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:59:32.392012", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "apply_patch", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-23T18:59:37.397295", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}

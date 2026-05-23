@@ -90,6 +90,7 @@ class ToolConfirmation(BaseModel):
     description: str
 
     diff : FileDiff | None = None
+    diff_text: str | None = None
     affected_paths : list[Path] = field(default_factory=list)
     command : str | None = None
     is_dangerous : bool = False

@@ -180,10 +180,13 @@ class TUI:
 
     def _extract_read_file_code(self, text: str) -> tuple[int, str] | None:
         body = text
-        header_match = re.match(r"^Showing lines (\d+)-(\d+) of (\d+)\n\n", text)
-
-        if header_match:
-            body = text[header_match.end() :]
+        if "\n\n" in text:
+            possible_header, possible_body = text.split("\n\n", 1)
+            if not re.match(r"^\s*\d+\|", possible_header) and re.match(
+                r"^\s*\d+\|",
+                possible_body,
+            ):
+                body = possible_body
 
         code_lines: list[str] = []
         start_line: int | None = None
@@ -474,33 +477,50 @@ class TUI:
 
         if name == "read_file" and success:
             if primary_path:
-                start_line, code = self._extract_read_file_code(output)
+                extracted = self._extract_read_file_code(output)
 
-                shown_start = metadata.get("shown_start")
-                shown_end = metadata.get("shown_end")
-                total_lines = metadata.get("total_lines")
-                pl = self._guess_language(primary_path)
+                if extracted:
+                    start_line, code = extracted
+                    shown_start = metadata.get("shown_start")
+                    shown_end = metadata.get("shown_end")
+                    total_lines = metadata.get("total_lines")
+                    has_trailing_newline = metadata.get("has_trailing_newline")
+                    pl = self._guess_language(primary_path)
 
-                header_parts = [display_path_rel_to_cwd(primary_path, self.cwd)]
-                header_parts.append(" • ")
+                    header_parts = [display_path_rel_to_cwd(primary_path, self.cwd)]
 
-                if shown_start and shown_end and total_lines:
-                    header_parts.append(
-                        f"lines {shown_start}-{shown_end} of {total_lines}"
+                    if shown_start and shown_end and total_lines:
+                        header_parts.append(
+                            f"lines {shown_start}-{shown_end} of {total_lines}"
+                        )
+                    if has_trailing_newline is False and shown_end == total_lines:
+                        header_parts.append("no trailing newline")
+
+                    blocks.append(Text(" • ".join(header_parts), style="muted"))
+                    blocks.append(
+                        Syntax(
+                            code,
+                            pl,
+                            theme="monokai",
+                            line_numbers=True,
+                            start_line=start_line,
+                            word_wrap=False,
+                        )
                     )
-
-                header = "".join(header_parts)
-                blocks.append(Text(header, style="muted"))
-                blocks.append(
-                    Syntax(
-                        code,
-                        pl,
-                        theme="monokai",
-                        line_numbers=True,
-                        start_line=start_line,
-                        word_wrap=False,
+                else:
+                    output_display = truncate_text(
+                        output,
+                        self.config.model_name,
+                        self._max_block_tokens,
                     )
-                )
+                    blocks.append(
+                        Syntax(
+                            output_display,
+                            "text",
+                            theme="monokai",
+                            word_wrap=False,
+                        )
+                    )
             else:
                 output_display = truncate_text(
                     output,
@@ -765,6 +785,15 @@ class TUI:
             output.append(
                 Syntax(
                     diff_text,
+                    "diff",
+                    theme="monokai",
+                    word_wrap=True,
+                )
+            )
+        elif confirmation.diff_text:
+            output.append(
+                Syntax(
+                    confirmation.diff_text,
                     "diff",
                     theme="monokai",
                     word_wrap=True,

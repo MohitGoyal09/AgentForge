@@ -160,6 +160,8 @@ class ApprovalManager:
             if confirmation.affected_paths:
                 for p in confirmation.affected_paths:
                     console.print(f"  Path: {p}")
+            if confirmation.diff_text:
+                console.print(confirmation.diff_text)
             response = console.input("\n[bold]Approve? (y/n): [/bold]").strip().lower()
             return response in ("y", "yes")
         except Exception:
