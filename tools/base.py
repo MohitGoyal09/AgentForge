@@ -1,5 +1,6 @@
 from __future__ import annotations
 import abc
+import json
 from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 from pathlib import Path
@@ -65,6 +66,10 @@ class ToolResult(BaseModel):
     error: str | None = None
     truncated: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
+    summary: str | None = None
+    artifacts: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    recovery_hint: str | None = None
 
     diff_text: str | None = None
     exit_code : int | None = None
@@ -77,11 +82,28 @@ class ToolResult(BaseModel):
     def success_result(cls, output: str, **kwargs: Any):
         return cls(success=True, output=output, error=None, **kwargs)
 
-    def to_model_output(self) -> str:
-        if self.success:
-            return self.output
+    def _default_summary(self) -> str:
+        if self.summary:
+            return self.summary
+        if self.error:
+            return self.error
+        if self.output:
+            return self.output.splitlines()[0]
+        return ""
 
-        return f"Error : {self.error}\n\nOutput:\n{self.output}"
+    def to_model_output(self) -> str:
+        observation = {
+            "status": "success" if self.success else "error",
+            "summary": self._default_summary(),
+            "artifacts": self.artifacts,
+            "next_actions": self.next_actions,
+            "recovery_hint": self.recovery_hint,
+        }
+
+        if self.success:
+            return f"{self.output}\n\n[tool_observation]\n{json.dumps(observation)}"
+
+        return f"Error : {self.error}\n\nOutput:\n{self.output}\n\n[tool_observation]\n{json.dumps(observation)}"
 
 
 class ToolConfirmation(BaseModel):

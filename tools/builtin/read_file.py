@@ -45,10 +45,18 @@ class ReadFileTool(Tool):
         path = resolve_path(invocation.cwd, params.path)
 
         if not path.exists():
-            return ToolResult.error_result(f"File not found: {path}")
+            return ToolResult.error_result(
+                f"File not found: {path}",
+                summary=f"File not found: {path}",
+                recovery_hint="Check the path with list_dir or glob, then retry read_file with the correct relative path.",
+            )
 
         if not path.is_file():
-            return ToolResult.error_result(f"Path is not a file: {path}")
+            return ToolResult.error_result(
+                f"Path is not a file: {path}",
+                summary=f"Path is not a file: {path}",
+                recovery_hint="Use list_dir for directories or provide a file path.",
+            )
 
         file_size = path.stat().st_size
 
@@ -65,7 +73,10 @@ class ReadFileTool(Tool):
             )
             return ToolResult.error_result(
                 f"Cannot read binary file: {path.name} ({size_str}) "
-                f"This tool only reads text files."
+                f"This tool only reads text files.",
+                summary=f"Cannot read binary file: {path.name}",
+                artifacts=[str(path)],
+                recovery_hint="Use a binary-aware tool or inspect metadata instead of read_file.",
             )
 
         try:
@@ -81,6 +92,8 @@ class ReadFileTool(Tool):
             if total_lines == 0:
                 return ToolResult.success_result(
                     "File is empty.",
+                    summary=f"Read empty file: {path}",
+                    artifacts=[str(path)],
                     metadata={
                         "lines": 0,
                         "has_trailing_newline": has_trailing_newline,
@@ -128,6 +141,13 @@ class ReadFileTool(Tool):
             return ToolResult.success_result(
                 output=output,
                 truncated=truncated,
+                summary=f"Read lines {start_idx + 1}-{end_idx} of {path}",
+                artifacts=[str(path)],
+                next_actions=(
+                    ["When patching this file, include no-final-newline handling if editing the last line."]
+                    if end_idx == total_lines and not has_trailing_newline
+                    else []
+                ),
                 metadata={
                     "path": str(path),
                     "total_lines": total_lines,
@@ -137,7 +157,11 @@ class ReadFileTool(Tool):
                 },
             )
         except Exception as e:
-            return ToolResult.error_result(f"Failed to read file: {e}")
+            return ToolResult.error_result(
+                f"Failed to read file: {e}",
+                summary=f"Failed to read file: {path}",
+                recovery_hint="Check file permissions and encoding, then retry or use shell for deeper inspection.",
+            )
 
         
         

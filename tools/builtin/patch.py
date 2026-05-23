@@ -356,6 +356,9 @@ class ApplyPatchTool(Tool):
                     return ToolResult.success_result(
                         f"Patch check passed with fallback for {len(fallback_paths)} file(s)",
                         diff_text=patch,
+                        summary=f"Patch check passed with fallback for {len(fallback_paths)} file(s)",
+                        artifacts=[str(path) for path in fallback_paths],
+                        next_actions=["Run apply_patch with dry_run=false to apply this patch."],
                         metadata={
                             "paths": [str(path) for path in fallback_paths],
                             "dry_run": True,
@@ -369,6 +372,9 @@ class ApplyPatchTool(Tool):
                     "Patch check failed",
                     output=output + self._patch_failure_hint(),
                     diff_text=patch,
+                    summary="Patch check failed",
+                    artifacts=[str(path) for path in affected_paths],
+                    recovery_hint="Re-read the target file, fix stale context or whitespace, then retry. For append-only changes, prefer append_file.",
                     metadata={
                         "paths": [str(path) for path in affected_paths],
                         "dry_run": True,
@@ -386,10 +392,13 @@ class ApplyPatchTool(Tool):
             except Exception as fallback_error:
                 output = strict_output + f"\nFallback apply failed: {fallback_error}"
                 return ToolResult.error_result(
-                    "Patch check failed",
-                    output=output + self._patch_failure_hint(),
-                    diff_text=patch,
-                    metadata={
+                "Patch check failed",
+                output=output + self._patch_failure_hint(),
+                diff_text=patch,
+                summary="Patch check failed",
+                artifacts=[str(path) for path in affected_paths],
+                recovery_hint="Re-read the target file, fix stale context or whitespace, then retry. For append-only changes, prefer append_file.",
+                metadata={
                         "paths": [str(path) for path in affected_paths],
                         "dry_run": False,
                         "strip": params.strip,
@@ -399,6 +408,9 @@ class ApplyPatchTool(Tool):
             return ToolResult.success_result(
                 f"Applied patch with fallback to {len(fallback_paths)} file(s)",
                 diff_text=patch,
+                summary=f"Applied patch with fallback to {len(fallback_paths)} file(s)",
+                artifacts=[str(path) for path in fallback_paths],
+                next_actions=["Use read_file or tests to verify the changed file behavior."],
                 metadata={
                     "paths": [str(path) for path in fallback_paths],
                     "dry_run": False,
@@ -411,6 +423,9 @@ class ApplyPatchTool(Tool):
             return ToolResult.success_result(
                 f"Patch check passed for {len(affected_paths)} file(s)",
                 diff_text=patch,
+                summary=f"Patch check passed for {len(affected_paths)} file(s)",
+                artifacts=[str(path) for path in affected_paths],
+                next_actions=["Run apply_patch with dry_run=false to apply this patch."],
                 metadata={
                     "paths": [str(path) for path in affected_paths],
                     "dry_run": True,
@@ -425,6 +440,9 @@ class ApplyPatchTool(Tool):
                 "Patch apply failed",
                 output=output + self._patch_failure_hint(),
                 diff_text=patch,
+                summary="Patch apply failed",
+                artifacts=[str(path) for path in affected_paths],
+                recovery_hint="Re-read the target file, fix stale context or whitespace, then retry. For append-only changes, prefer append_file.",
                 metadata={
                     "paths": [str(path) for path in affected_paths],
                     "dry_run": False,
@@ -435,6 +453,9 @@ class ApplyPatchTool(Tool):
         return ToolResult.success_result(
             f"Applied patch to {len(affected_paths)} file(s)",
             diff_text=patch,
+            summary=f"Applied patch to {len(affected_paths)} file(s)",
+            artifacts=[str(path) for path in affected_paths],
+            next_actions=["Use read_file or tests to verify the changed file behavior."],
             metadata={
                 "paths": [str(path) for path in affected_paths],
                 "dry_run": False,

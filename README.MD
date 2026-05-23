@@ -232,6 +232,7 @@ Built-in tools include:
 | --- | --- | --- |
 | `read_file` | read | Read text files with line numbers |
 | `write_file` | write | Create or overwrite files |
+| `append_file` | write | Append text to the end of a file |
 | `edit` | write | Replace exact text in files |
 | `apply_patch` | write | Apply a unified diff across one or more files |
 | `shell` | shell | Run shell commands with timeout and approval |

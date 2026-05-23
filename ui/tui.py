@@ -504,7 +504,7 @@ class TUI:
                             theme="monokai",
                             line_numbers=True,
                             start_line=start_line,
-                            word_wrap=False,
+                            word_wrap=True,
                         )
                     )
                 else:
@@ -535,9 +535,11 @@ class TUI:
                         word_wrap=False,
                     )
                 )
-        elif name in {"write_file", "edit"} and success and diff:
+        elif name in {"write_file", "append_file", "edit", "apply_patch"} and success and diff:
             output_line = output.strip() if output.strip() else "Completed"
             blocks.append(Text(output_line, style="muted"))
+            if metadata.get("fallback"):
+                blocks.append(Text("applied with line-based fallback", style="warning"))
             diff_text = diff
             diff_display = truncate_text(
                 diff_text,
