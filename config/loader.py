@@ -5,7 +5,7 @@ from platformdirs import user_config_dir, user_data_dir
 from dotenv import load_dotenv
 try:
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+except ModuleNotFoundError: 
     import tomli as tomllib
 
 from config.config import Config
@@ -14,6 +14,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 CONFIG_FILE_NAME = "config.toml"
+SKILLS_DIR_NAME = "skills"
+GLOBAL_SKILLS_DIR_NAME = ".agents/skills"
 
 AGENT_MD_FILE = "AGENT.MD"
 
@@ -28,6 +30,14 @@ def get_data_dir() -> Path:
 
 def get_system_config_path() -> Path:
     return get_config_dir() / CONFIG_FILE_NAME
+
+
+def get_user_skills_dir() -> Path:
+    return get_config_dir() / SKILLS_DIR_NAME
+
+
+def get_global_skills_dir() -> Path:
+    return Path.home() / GLOBAL_SKILLS_DIR_NAME
 
 
 def _parse_toml(path: Path):
@@ -52,6 +62,40 @@ def _get_project_config(cwd: Path) -> Path | None:
             return config_file
 
     return None
+
+
+def _get_project_skills_dir(cwd: Path) -> Path:
+    return cwd.resolve() / ".agentforge" / SKILLS_DIR_NAME
+
+
+def _normalize_skill_root(cwd: Path, root: str | Path) -> Path:
+    path = Path(root).expanduser()
+    if not path.is_absolute():
+        path = cwd.resolve() / path
+    return path.resolve()
+
+
+def _detect_skill_roots(cwd: Path, configured_roots: list[str | Path] | None) -> list[Path]:
+    roots: list[Path] = []
+
+    for root in [
+        _get_project_skills_dir(cwd),
+        *[_normalize_skill_root(cwd, root) for root in configured_roots or []],
+        get_global_skills_dir(),
+        get_user_skills_dir(),
+    ]:
+        if root.is_dir():
+            roots.append(root.resolve())
+
+    deduped: list[Path] = []
+    seen: set[Path] = set()
+    for root in roots:
+        if root in seen:
+            continue
+        seen.add(root)
+        deduped.append(root)
+
+    return deduped
 
 
 def _get_agent_md_files(cwd: Path) -> Path | None:
@@ -102,6 +146,14 @@ def load_config(cwd: Path | None) -> Config:
 
     if "cwd" not in config_dict:
         config_dict["cwd"] = cwd
+
+    if config_dict.get("skills_enabled", True):
+        config_dict["skill_roots"] = _detect_skill_roots(
+            cwd,
+            config_dict.get("skill_roots"),
+        )
+    else:
+        config_dict["skill_roots"] = []
 
     if "developer_instructions" not in config_dict:
         agent_md_content = _get_agent_md_files(cwd)

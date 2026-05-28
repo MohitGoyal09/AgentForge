@@ -12,6 +12,7 @@ from hooks.hook_system import HookSystem
 from agent.persistence import PersistenceManager, SessionSnapshot
 from safety.approval import ApprovalManager
 from tools.discovery import ToolDiscoveryManager
+from skills.manager import SkillManager
 from tools.mcp.mcp_manager import MCPManager
 from tools.registry import create_default_registery
 
@@ -28,6 +29,8 @@ class Session:
         )
         self.mcp_manager = MCPManager(self.config)
         self.approval_manager = ApprovalManager(self.config.approval , self.config.cwd)
+        self.skills_manager = SkillManager(self.config.skill_roots)
+        self.active_skills : list[str] = []
         self.chat_compactor = ChatCompactor(client=self.client)
         self.loop_detector = LoopDetector()
         self.hook_system = HookSystem(config)
@@ -42,7 +45,15 @@ class Session:
         await self.mcp_manager.initialize()
         self.mcp_manager.register_tools(self.tool_registry)
         self.discovery_manager.discover_all()
-        self.context_manager = ContextManager(config=self.config, user_memory=self._load_memory(), tools=self.tool_registry.get_tools())
+        self.skills_manager.discover()
+        self.context_manager = ContextManager(
+            config=self.config,
+            user_memory=self._load_memory(),
+            tools=self.tool_registry.get_tools(),
+            skills=self.skills_manager.list_skills(),
+            active_skills=self.active_skills,
+            active_skill_bodies=self.skills_manager.get_active_skill_bodies(self.active_skills),
+        )
 
 
     def increment_turn(self) -> int:
@@ -72,7 +83,7 @@ class Session:
             total_usage=self.context_manager.get_total_usage(),
             active_tools=[tool.name for tool in self.tool_registry.get_tools()],
             mcp_servers=[server["name"] for server in self.mcp_manager.get_all_servers()],
-            active_skills=[],
+            active_skills=list(self.active_skills),
             todos=todos,
             event_sequence=self._event_sequence,
             mode=mode,
@@ -87,8 +98,14 @@ class Session:
         self.updated_at = datetime.now()
         self._turn_count = snapshot.turn_count
         self._event_sequence = snapshot.event_sequence
+        self.active_skills = list(snapshot.active_skills)
         self.context_manager.restore_messages(snapshot.messages)
         self.context_manager.restore_usage(snapshot.latest_usage, snapshot.total_usage)
+        self.context_manager.refresh_system_prompt(
+            skills=self.skills_manager.list_skills(),
+            active_skills=self.active_skills,
+            active_skill_bodies=self.skills_manager.get_active_skill_bodies(self.active_skills),
+        )
         self.loop_detector.clear()
 
         todo_tool = self.tool_registry.get("todos")
@@ -110,6 +127,35 @@ class Session:
             sequence=self._event_sequence,
             event_type=event_type,
             payload=payload,
+        )
+
+    def list_skills(self) -> list:
+        return self.skills_manager.list_skills()
+
+    def activate_skill(self, name: str) -> str:
+        if not self.skills_manager.has_skill(name):
+            raise ValueError(f"Unknown skill: {name}")
+        if name not in self.active_skills:
+            self.active_skills.append(name)
+        body = self.skills_manager.load_skill(name)
+        self._refresh_skill_prompt()
+        return body
+
+    def deactivate_skill(self, name: str) -> bool:
+        if name in self.active_skills:
+            self.active_skills.remove(name)
+            self.skills_manager.unload_skill(name)
+            self._refresh_skill_prompt()
+            return True
+        return False
+
+    def _refresh_skill_prompt(self) -> None:
+        if not self.context_manager:
+            return
+        self.context_manager.refresh_system_prompt(
+            skills=self.skills_manager.list_skills(),
+            active_skills=self.active_skills,
+            active_skill_bodies=self.skills_manager.get_active_skill_bodies(self.active_skills),
         )
 
     def _redact_config(self, value: Any) -> Any:

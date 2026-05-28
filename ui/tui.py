@@ -10,6 +10,7 @@ from rich.table import Table
 from rich import box
 from rich.prompt import Prompt
 from rich.console import Group
+from rich.align import Align
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from config.config import Config
@@ -18,6 +19,15 @@ from utils.paths import display_path_rel_to_cwd
 import re
 
 from utils.text import truncate_text
+
+AGENTFORGE_ASCII = r"""
+    ___                    __  ______                    
+   /   |  ____ ____  ____ / /_/ ____/___  _________ ____ 
+  / /| | / __ `/ _ \/ __ `/ __/ /_  / __ \/ ___/ __ `/ _ \
+ / ___ |/ /_/ /  __/ /_/ / /_/ __/ / /_/ / /  / /_/ /  __/
+/_/  |_|\__, /\___/\__,_/\__/_/    \____/_/   \__, /\___/ 
+       /____/                                 /____/       
+""".strip("\n")
 
 AGENT_THEME = Theme(
     {
@@ -241,6 +251,7 @@ class TUI:
         }.get(suffix, "text")
 
     def print_welcome(self, title: str, lines: list[str]) -> None:
+        main_logo = Align.center(Text(AGENTFORGE_ASCII, style="bold bright_white"))
         table = Table.grid(padding=(0, 2))
         table.add_column(style="muted", no_wrap=True)
         table.add_column(style="code", overflow="fold")
@@ -254,13 +265,16 @@ class TUI:
 
         self.console.print(
             Panel(
-                table,
-                title=Text(title, style="highlight"),
-                title_align="left",
+                Group(
+                    main_logo,
+                    Text(""),
+                    table,
+                ),
+                title=None,
                 subtitle=Text("type /help for commands", style="muted"),
                 subtitle_align="right",
-                border_style="border",
-                box=box.ROUNDED,
+                border_style="bright_cyan",
+                box=box.DOUBLE,
                 padding=(1, 2),
             )
         )
@@ -323,6 +337,39 @@ class TUI:
             Panel(
                 table if tools else Text("No tools registered", style="muted"),
                 title=Text("Tools", style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
+    def show_skills(
+        self,
+        skills: list[Any],
+        active_skills: list[str] | None = None,
+    ) -> None:
+        active = set(active_skills or [])
+        table = Table(
+            box=box.SIMPLE,
+            show_header=True,
+            header_style="highlight",
+            expand=True,
+        )
+        table.add_column("Skill", style="tool", no_wrap=True)
+        table.add_column("State", style="muted", no_wrap=True)
+        table.add_column("Description", style="code", overflow="fold")
+        table.add_column("Tools", style="muted", overflow="fold")
+
+        for skill in sorted(skills, key=lambda item: item.name):
+            state = "active" if skill.name in active else "available"
+            tools = ", ".join(skill.allowed_tools or [])
+            table.add_row(skill.name, state, skill.description, tools or "-")
+
+        self.console.print(
+            Panel(
+                table if skills else Text("No skills discovered", style="muted"),
+                title=Text("Skills index", style="highlight"),
                 title_align="left",
                 border_style="border",
                 box=box.ROUNDED,
@@ -832,6 +879,9 @@ class TUI:
 - `/approval <mode>` - Change approval mode
 - `/stats` - Show session statistics
 - `/tools` - List available tools
+- `/skills` - List available skills
+- `/skill <name>` - Activate a skill
+- `/unskill <name>` - Deactivate a skill
 - `/mcp` - Show MCP server status
 - `/save` - Save current session
 - `/checkpoint` - Create a checkpoint

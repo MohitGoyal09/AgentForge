@@ -497,10 +497,41 @@ flowchart LR
     refs --> prompt
 ```
 
-Recommended layout:
+Current root detection happens during config loading. AgentForge detects:
+
+1. project-level skills in `.agentforge/skills`
+2. user-home skills in `~/.agents/skills`
+3. user config skills in `agentforge/skills`
+4. extra configured roots from `skill_roots`
+
+Only root paths are stored in config at this stage. Full `SKILL.md` bodies should be loaded later by the skill manager only after a skill is selected.
+
+Recommended project layout:
 
 ```text
-.skills/
+.agentforge/
+`-- skills/
+    |-- debugging/
+    |   |-- SKILL.md
+    |   `-- references/
+    |-- tdd/
+    |   `-- SKILL.md
+    `-- code-review/
+        `-- SKILL.md
+```
+
+The global user skill directory is `~/.agents/skills`, and it follows the same folder shape.
+
+If you want to keep a standalone `.skills` directory somewhere else, add it explicitly:
+
+```toml
+skill_roots = [".skills"]
+```
+
+The internal skill folder shape stays the same:
+
+```text
+skills/
 |-- debugging/
 |   |-- SKILL.md
 |   `-- references/
@@ -517,6 +548,13 @@ Always show what skills exist.
 Only load full skill text when selected.
 Only load reference files when the skill asks for them.
 ```
+
+Automatic skill matching is intentionally conservative:
+
+- exact skill names win first, so `frontend design skill` loads only `frontend-design`
+- inferred matches load at most one skill per user message
+- low-confidence overlap is ignored instead of bloating the prompt
+- the TUI shows the matched skill, reason, source file, and loaded line count
 
 ## Persistence, Checkpoints, and Replay
 
@@ -626,6 +664,9 @@ Example `.agentforge/config.toml`:
 hooks_enabled = true
 approval = "on-request"
 max_turns = 100
+skills_enabled = true
+# Optional extra roots. `.agentforge/skills` is detected automatically.
+skill_roots = [".skills"]
 
 [model]
 name = "deepseek/deepseek-v4-flash:free"

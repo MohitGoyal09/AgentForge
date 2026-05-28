@@ -31,7 +31,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /tools /mcp /stats /exit",
+                "commands: /help /skills /skill /unskill /tools /mcp /stats /exit",
             ],
         )
 
@@ -109,6 +109,52 @@ class CLI:
         if name == "/tools":
             if self.agent:
                 self.tui.show_tools(self.agent.session.tool_registry.get_tools())
+            return True
+        if name == "/skills":
+            if self.agent:
+                self.tui.show_notice("Scanning skill roots and building skill index...", "Skills")
+                self.tui.show_skills(
+                    self.agent.session.list_skills(),
+                    self.agent.session.active_skills,
+                )
+                self.tui.show_notice(
+                    f"Loaded {len(self.agent.session.list_skills())} skill(s) from discovered roots",
+                    "Skills",
+                )
+            return True
+        if name == "/skill":
+            if not self.agent:
+                return True
+            if not argument:
+                self.tui.show_error("Usage: /skill <name>")
+                return True
+            try:
+                skill = self.agent.session.skills_manager.get_skill(argument)
+                body = self.agent.session.activate_skill(argument)
+                self.tui.show_notice(
+                    "\n".join(
+                        [
+                            f"Activated skill: {argument}",
+                            "Reason: manual command",
+                            f"File: {skill.path}",
+                            f"Loaded {len(body.splitlines())} lines into prompt context.",
+                        ]
+                    ),
+                    "Skill",
+                )
+            except (KeyError, ValueError) as e:
+                self.tui.show_error(str(e))
+            return True
+        if name == "/unskill":
+            if not self.agent:
+                return True
+            if not argument:
+                self.tui.show_error("Usage: /unskill <name>")
+                return True
+            if self.agent.session.deactivate_skill(argument):
+                self.tui.show_notice(f"Unloaded skill from active context: {argument}", "Skill")
+            else:
+                self.tui.show_error(f"Skill is not active: {argument}")
             return True
         if name == "/mcp":
             if self.agent:
@@ -204,6 +250,8 @@ class CLI:
         assistant_streaming = False
         final_response: str | None = None
 
+        await self._auto_activate_skills(message)
+
         async for event in self.agent.run(message):
             self.agent.session.record_event(event.type.value, event.data)
 
@@ -252,6 +300,32 @@ class CLI:
 
         self.agent.session.save_session()
         return final_response
+
+    async def _auto_activate_skills(self, message: str) -> None:
+        if not self.agent or not self.agent.session:
+            return
+
+        matches = self.agent.session.skills_manager.suggest_skill_matches(message, limit=3)
+        if matches and not matches[0].explicit:
+            matches = matches[:1]
+
+        for match in matches:
+            skill = match.skill
+            if skill.name in self.agent.session.active_skills:
+                continue
+
+            body = self.agent.session.activate_skill(skill.name)
+            self.tui.show_notice(
+                "\n".join(
+                    [
+                        f"Activated skill: {skill.name}",
+                        f"Reason: {match.reason}",
+                        f"File: {skill.path}",
+                        f"Loaded {len(body.splitlines())} lines into prompt context.",
+                    ]
+                ),
+                "Skills",
+            )
 
 
 async def run(messages: list[dict[str, Any]]):

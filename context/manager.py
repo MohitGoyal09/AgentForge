@@ -5,6 +5,7 @@ from prompts.system import get_system_prompt
 from dataclasses import dataclass, field
 from utils.text import count_tokens
 from typing import Any
+from skills.manager import SkillMetadata
 
 
 @dataclass
@@ -57,9 +58,29 @@ class ContextManager:
     PRUNE_PROTECT_TOKENS = 40_000
     PRUNE_MINIMUM_TOKENS = 20_000
 
-    def __init__(self, config: Config, user_memory: str | None = None, tools: list | None = None):
+    def __init__(
+        self,
+        config: Config,
+        user_memory: str | None = None,
+        tools: list | None = None,
+        skills: list[SkillMetadata] | None = None,
+        active_skills: list[str] | None = None,
+        active_skill_bodies: dict[str, str] | None = None,
+    ):
         self.config = config
-        self._system_prompt = get_system_prompt(config=config, user_memory=user_memory, tools=tools)
+        self._user_memory = user_memory
+        self._tools = tools or []
+        self._skills = skills or []
+        self._active_skills = active_skills or []
+        self._active_skill_bodies = active_skill_bodies or {}
+        self._system_prompt = get_system_prompt(
+            config=config,
+            user_memory=user_memory,
+            tools=tools,
+            skills=self._skills,
+            active_skills=self._active_skills,
+            active_skill_bodies=self._active_skill_bodies,
+        )
         self._model_name = self.config.model_name
         self._messages: list[MessageItem] = []
         self._latest_usage = TokenUsage()
@@ -218,6 +239,28 @@ I'll continue with the REMAINING tasks only, starting from where we left off."""
     def restore_usage(self, latest_usage: TokenUsage, total_usage: TokenUsage) -> None:
         self._latest_usage = latest_usage
         self._total_usage = total_usage
+
+    def refresh_system_prompt(
+        self,
+        skills: list[SkillMetadata] | None = None,
+        active_skills: list[str] | None = None,
+        active_skill_bodies: dict[str, str] | None = None,
+    ) -> None:
+        if skills is not None:
+            self._skills = skills
+        if active_skills is not None:
+            self._active_skills = active_skills
+        if active_skill_bodies is not None:
+            self._active_skill_bodies = active_skill_bodies
+
+        self._system_prompt = get_system_prompt(
+            config=self.config,
+            user_memory=self._user_memory,
+            tools=self._tools,
+            skills=self._skills,
+            active_skills=self._active_skills,
+            active_skill_bodies=self._active_skill_bodies,
+        )
 
 
 

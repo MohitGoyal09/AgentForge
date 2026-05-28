@@ -2,14 +2,18 @@ from datetime import datetime
 import platform
 
 from config.config import Config
+from skills.manager import SkillMetadata
 from tools.base import Tool
 
 
 
 def get_system_prompt(
-    config : Config,
+    config: Config,
     user_memory: str | None = None,
     tools: list[Tool] | None = None,
+    skills: list[SkillMetadata] | None = None,
+    active_skills: list[str] | None = None,
+    active_skill_bodies: dict[str, str] | None = None,
 ) -> str:
     parts = []
 
@@ -20,7 +24,16 @@ def get_system_prompt(
 
     if tools:
         parts.append(_get_tool_guidelines_section(tools))
-  
+
+    if skills:
+        parts.append(
+            _get_skills_section(
+                skills,
+                active_skills or [],
+                active_skill_bodies or {},
+            )
+        )
+
     # AGENTS.md spec
     parts.append(_get_agents_md_section())
 
@@ -225,6 +238,43 @@ The following information has been stored from previous interactions:
 {memory}
 
 Use this information to personalize your responses and maintain consistency."""
+
+
+def _get_skills_section(
+    skills: list[SkillMetadata],
+    active_skills: list[str],
+    active_skill_bodies: dict[str, str],
+) -> str:
+    active = set(active_skills)
+    lines = ["# Skills", ""]
+
+    if not skills:
+        lines.append("No skills were discovered.")
+        return "\n".join(lines)
+
+    lines.append("Available skills:")
+    for skill in skills:
+        marker = "*" if skill.name in active else "-"
+        tools = ""
+        if skill.allowed_tools:
+            tools = f" | tools: {', '.join(skill.allowed_tools)}"
+        lines.append(f"{marker} {skill.name}: {skill.description}{tools}")
+
+    if active:
+        lines.append("")
+        lines.append(f"Active skills: {', '.join(sorted(active))}")
+        for name in sorted(active):
+            body = active_skill_bodies.get(name)
+            if not body:
+                continue
+            lines.append("")
+            lines.append(f"## {name}")
+            lines.append("")
+            lines.append(body.strip())
+
+    lines.append("")
+    lines.append("Load full skill text only when a specific skill is selected.")
+    return "\n".join(lines)
 
 
 def _get_tool_guidelines_section(tools: list[Tool]) -> str:

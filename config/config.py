@@ -103,6 +103,11 @@ class Config(BaseModel):
 
     allowed_tools : list[str] | None = Field(None , description="If Set , only these tools will be available to the agent")
     subagents: list[SubagentConfig] = Field(default_factory=list, description="User-defined subagents")
+    skills_enabled: bool = True
+    skill_roots: list[Path] = Field(
+        default_factory=list,
+        description="Directories that contain skill folders with SKILL.md files",
+    )
 
     @property
     def api_key(self) -> str | None:
