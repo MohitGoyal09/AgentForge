@@ -2,6 +2,7 @@ import asyncio
 import sys
 import click
 from pathlib import Path
+from importlib.metadata import version, PackageNotFoundError
 from cli.commands import CLI
 from cli.setup import run_setup
 from config.config import Config
@@ -10,8 +11,30 @@ from ui.tui import get_console
 
 console = get_console()
 
+try:
+    VERSION = version("agentforge")
+except PackageNotFoundError:
+    VERSION = "0.1.0"
+
+
+SHELL_COMPLETION_INSTRUCTIONS = {
+    "bash": (
+        "# Add this to your ~/.bashrc or ~/.bash_profile:\n"
+        '# eval "$(_AGENTFORGE_COMPLETE=bash_source agentforge)"'
+    ),
+    "zsh": (
+        "# Add this to your ~/.zshrc:\n"
+        '# eval "$(_AGENTFORGE_COMPLETE=zsh_source agentforge)"'
+    ),
+    "fish": (
+        "# Add this to your ~/.config/fish/config.fish:\n"
+        "# eval (env _AGENTFORGE_COMPLETE=fish_source agentforge)"
+    ),
+}
+
 
 @click.group(invoke_without_command=True)
+@click.version_option(version=VERSION, prog_name="AgentForge")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     if ctx.invoked_subcommand is None:
@@ -63,3 +86,14 @@ def run(prompt: str | None, cwd: Path | None) -> None:
             sys.exit(1)
     else:
         asyncio.run(cli_obj.run_interactive())
+
+
+@cli.command()
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+def completion(shell: str) -> None:
+    """Print shell completion script for the given shell.
+
+    Add the suggested line to your shell's rc file for tab completion.
+    """
+    instructions = SHELL_COMPLETION_INSTRUCTIONS.get(shell, "")
+    console.print(instructions)

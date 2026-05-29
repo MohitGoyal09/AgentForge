@@ -143,6 +143,50 @@ class Config(BaseModel):
         if not self.cwd.exists():
             errors.append(f"Working directory does not exist: {self.cwd}")
 
+        model_name = self.model.name
+        if not model_name or "/" not in model_name:
+            errors.append(
+                f"Invalid model name: '{model_name}'. Expected format: provider/model (e.g. 'openai/gpt-4')"
+            )
+
+        if self.model.temperature < 0 or self.model.temperature > 2:
+            errors.append(f"Temperature must be between 0 and 2, got {self.model.temperature}")
+
+        if not self.cwd.is_dir():
+            errors.append(f"Working directory is not a directory: {self.cwd}")
+
+        for name, server in self.mcp_servers.items():
+            if server.enabled and server.command:
+                cmd_path = Path(server.command).expanduser()
+                if not cmd_path.is_absolute():
+                    import shutil
+                    if not shutil.which(server.command):
+                        errors.append(
+                            f"MCP server '{name}': command '{server.command}' not found in PATH"
+                        )
+                elif not cmd_path.exists():
+                    errors.append(
+                        f"MCP server '{name}': command '{server.command}' does not exist"
+                    )
+            if server.enabled and server.cwd and not server.cwd.exists():
+                errors.append(
+                    f"MCP server '{name}': working directory '{server.cwd}' does not exist"
+                )
+
+        for root in self.skill_roots:
+            if not root.exists():
+                errors.append(f"Skill root does not exist: {root}")
+            elif not root.is_dir():
+                errors.append(f"Skill root is not a directory: {root}")
+
+        for hook in self.hooks:
+            if hook.enabled and hook.script:
+                script_path = Path(hook.script).expanduser()
+                if not script_path.is_absolute():
+                    script_path = self.cwd / hook.script
+                if not script_path.exists():
+                    errors.append(f"Hook '{hook.name}': script '{hook.script}' not found")
+
         return errors
 
     def to_dict(self) -> dict[str, Any]:

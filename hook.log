@@ -122,3 +122,5 @@
 [HOOK] {"timestamp": "2026-05-30T01:02:13.830723", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "glob", "user_message": null, "error": null}
 [HOOK] {"timestamp": "2026-05-30T01:02:33.540956", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "glob", "user_message": null, "error": null}
 [HOOK] {"timestamp": "2026-05-30T01:02:56.941359", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "list_dir", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-30T01:14:33.041819", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "hi", "error": null}
+[HOOK] {"timestamp": "2026-05-30T01:15:53.513378", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "hi", "error": null}

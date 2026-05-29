@@ -17,8 +17,14 @@ from config.config import Config
 from tools.base import ToolConfirmation
 from utils.paths import display_path_rel_to_cwd
 import re
+from importlib.metadata import version, PackageNotFoundError
 
 from utils.text import truncate_text
+
+try:
+    AGENTFORGE_VERSION = version("agentforge")
+except PackageNotFoundError:
+    AGENTFORGE_VERSION = "0.1.0"
 
 AGENTFORGE_ASCII = r"""
         █████╗  ██████╗ ███████╗███╗   ██╗████████╗
@@ -268,7 +274,7 @@ class TUI:
 
         info = Group(
             Text(""),
-            Text("  AgentForge v0.1.0", style="bold white"),
+            Text(f"  AgentForge v{AGENTFORGE_VERSION}", style="bold white"),
             Text(""),
         )
 
