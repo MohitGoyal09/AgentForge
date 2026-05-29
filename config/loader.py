@@ -124,6 +124,7 @@ def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
 def load_config(cwd: Path | None) -> Config:
     cwd = cwd or Path.cwd()
     load_dotenv(cwd / ".env")
+    load_dotenv(get_config_dir() / ".env")
     load_dotenv()
 
     system_path = get_system_config_path()

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentforge"
+version = "0.1.0"
+description = "An agentic coding harness for AI agents"
+requires-python = ">=3.10"
+dependencies = [
+    "openai",
+    "pydantic>=2.0",
+    "rich",
+    "httpx",
+    "click",
+    "python-dotenv",
+    "platformdirs",
+    "tiktoken",
+    "tomli; python_version < '3.11'",
+    "ddgs",
+    "fastmcp",
+]
+
+[project.scripts]
+agentforge = "cli.run:cli"
+
+[tool.setuptools.packages.find]
+include = ["agent*", "cli*", "client*", "config*", "context*", "hooks*", "prompts*", "safety*", "tools*", "ui*", "utils*", "skills*"]

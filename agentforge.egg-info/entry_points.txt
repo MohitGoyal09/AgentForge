@@ -1,0 +1,2 @@
+[console_scripts]
+agentforge = cli.run:cli
