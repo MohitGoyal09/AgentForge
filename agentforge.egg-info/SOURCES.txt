@@ -2,6 +2,7 @@ pyproject.toml
 agent/__init__.py
 agent/agent.py
 agent/events.py
+agent/modes.py
 agent/persistence.py
 agent/session.py
 agentforge.egg-info/PKG-INFO

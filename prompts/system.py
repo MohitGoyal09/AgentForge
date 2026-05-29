@@ -1,6 +1,7 @@
 from datetime import datetime
 import platform
 
+from agent.modes import AgentMode
 from config.config import Config
 from skills.manager import SkillMetadata
 from tools.base import Tool
@@ -14,6 +15,7 @@ def get_system_prompt(
     skills: list[SkillMetadata] | None = None,
     active_skills: list[str] | None = None,
     active_skill_bodies: dict[str, str] | None = None,
+    mode: AgentMode | None = None,
 ) -> str:
     parts = []
 
@@ -21,6 +23,9 @@ def get_system_prompt(
     parts.append(_get_identity_section())
     # Environment
     parts.append(_get_environment_section(config))
+
+    if mode:
+        parts.append(_get_mode_section(mode))
 
     if tools:
         parts.append(_get_tool_guidelines_section(tools))
@@ -51,9 +56,39 @@ def get_system_prompt(
  
     parts.append(_get_operational_section())
 
-    
-
     return "\n\n".join(parts)
+
+
+def _get_mode_section(mode: AgentMode) -> str:
+    if mode == AgentMode.PLAN:
+        return """# Mode: Plan
+
+You are in PLAN MODE. Your goal is to understand the task and produce a clear, actionable plan.
+
+## What you can do
+- Explore the codebase with read-only tools (read_file, grep, glob, list_dir)
+- Search the web for context (web_search, web_fetch)
+- Ask clarifying questions
+- Think through the approach and structure a plan
+
+## What you cannot do
+- Write or modify files
+- Run shell commands
+- Make any changes to the codebase
+
+## Your plan should cover
+1. **Goal** — what the user wants to accomplish
+2. **Approach** — high-level strategy
+3. **Steps** — ordered implementation steps
+4. **Files** — which files to create or modify and what changes are needed
+5. **Open questions** — anything ambiguous that needs user input
+
+## Critical: ending your turn
+When your plan is complete, tell the user clearly:
+"I'm in plan mode and cannot make changes. Switch to build mode with `/build` to implement this plan."
+
+Do not attempt to implement anything yourself. You are restricted to read-only tools."""
+    return ""
 
 
 def _get_identity_section() -> str:

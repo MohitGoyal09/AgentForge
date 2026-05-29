@@ -21,12 +21,18 @@ import re
 from utils.text import truncate_text
 
 AGENTFORGE_ASCII = r"""
-    ___                    __  ______                    
-   /   |  ____ ____  ____ / /_/ ____/___  _________ ____ 
-  / /| | / __ `/ _ \/ __ `/ __/ /_  / __ \/ ___/ __ `/ _ \
- / ___ |/ /_/ /  __/ /_/ / /_/ __/ / /_/ / /  / /_/ /  __/
-/_/  |_|\__, /\___/\__,_/\__/_/    \____/_/   \__, /\___/ 
-       /____/                                 /____/       
+        █████╗  ██████╗ ███████╗███╗   ██╗████████╗
+       ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝
+       ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║   
+       ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   
+       ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   
+       ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   
+         ███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+         ██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+         █████╗  ██║   ██║██████╔╝██║  ███╗█████╗  
+         ██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝  
+         ██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
+         ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 """.strip("\n")
 
 AGENT_THEME = Theme(
@@ -250,8 +256,22 @@ class TUI:
             ".sql": "sql",
         }.get(suffix, "text")
 
-    def print_welcome(self, title: str, lines: list[str]) -> None:
-        main_logo = Align.center(Text(AGENTFORGE_ASCII, style="bold bright_white"))
+    def print_welcome(self, title: str, lines: list[str], mode: str | None = None) -> None:
+        logo_lines = AGENTFORGE_ASCII.split("\n")
+        colored_logo_lines = []
+        for i, line in enumerate(logo_lines):
+            colors = ["bold cyan", "cyan", "bright_blue", "blue", "bright_magenta", "magenta"]
+            c = colors[i % len(colors)]
+            colored_logo_lines.append(Text(line, style=c))
+        logo_text = Text("\n").join(colored_logo_lines)
+        main_logo = Align.center(logo_text)
+
+        info = Group(
+            Text(""),
+            Text("  AgentForge v0.1.0", style="bold white"),
+            Text(""),
+        )
+
         table = Table.grid(padding=(0, 2))
         table.add_column(style="muted", no_wrap=True)
         table.add_column(style="code", overflow="fold")
@@ -263,19 +283,45 @@ class TUI:
             else:
                 table.add_row("", line)
 
+        if mode:
+            mode_style = "tool.read" if mode == "plan" else "tool.shell"
+            table.add_row("mode", f"[{mode_style}]{mode.upper()}[/{mode_style}]")
+
         self.console.print(
             Panel(
                 Group(
                     main_logo,
-                    Text(""),
+                    info,
                     table,
                 ),
                 title=None,
                 subtitle=Text("type /help for commands", style="muted"),
                 subtitle_align="right",
                 border_style="bright_cyan",
-                box=box.DOUBLE,
+                box=box.ROUNDED,
                 padding=(1, 2),
+            )
+        )
+
+        self.console.print(
+            Panel(
+                Text("AgentForge ready — what are we building today?", style="cyan"),
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(0, 2),
+            )
+        )
+
+    def show_mode(self, mode: str) -> None:
+        style = "tool.read" if mode == "plan" else "tool.shell"
+        self.console.print(
+            Panel(
+                Text(f"Switched to {mode.upper()} mode", style="code"),
+                title=Text("Mode", style=style),
+                title_align="left",
+                border_style=style,
+                box=box.ROUNDED,
+                padding=(0, 2),
             )
         )
 
@@ -885,6 +931,8 @@ class TUI:
 - `/skill <name>` - Activate a skill
 - `/unskill <name>` - Deactivate a skill
 - `/mcp` - Show MCP server status
+- `/plan` - Switch to plan mode (read-only, for designing a plan)
+- `/build` - Switch to build mode (full tool access, for implementing)
 - `/save` - Save current session
 - `/checkpoint` - Create a checkpoint
 - `/checkpoints` - List available checkpoints
@@ -897,5 +945,6 @@ class TUI:
 - Just type your message to chat with the agent
 - The agent can read, write, and execute code
 - Some operations require approval (can be configured)
+- Use `/plan` to design a plan before implementing with `/build`
 """
         self.console.print(Markdown(help_text))

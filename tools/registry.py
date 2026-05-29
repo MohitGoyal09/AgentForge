@@ -1,9 +1,10 @@
 from pathlib import Path
 from typing import Any
+from agent.modes import AgentMode
 from config.config import Config
 from hooks.hook_system import HookSystem
 from safety.approval import ApprovalContext, ApprovalDecision, ApprovalManager
-from tools.base import Tool, ToolInvocation, ToolResult
+from tools.base import Tool, ToolInvocation, ToolResult, ToolKind
 import logging
 
 from tools.builtin import get_all_builtin_tools
@@ -43,7 +44,7 @@ class ToolRegistry:
             return self._mcp_tools[name]
         return None
 
-    def get_tools(self):
+    def get_tools(self, mode: AgentMode | None = None):
         tools: list[Tool] = []
 
         for tool in self._tools.values():
@@ -52,13 +53,19 @@ class ToolRegistry:
         for mcp_tool in self._mcp_tools.values():
             tools.append(mcp_tool)
 
+        if mode == AgentMode.PLAN:
+            tools = [
+                t for t in tools
+                if t.kind in (ToolKind.READ, ToolKind.NETWORK)
+            ]
+
         if self.config.allowed_tools:
             allowed_set = set(self.config.allowed_tools)
             tools = [t for t in tools if t.name in allowed_set]
         return tools
 
-    def get_schemas(self) -> list[dict[str, Any]]:
-        return [tool.to_openai_schema() for tool in self.get_tools()]
+    def get_schemas(self, mode: AgentMode | None = None) -> list[dict[str, Any]]:
+        return [tool.to_openai_schema() for tool in self.get_tools(mode=mode)]
 
     async def invoke(
         self, 

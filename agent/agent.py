@@ -53,7 +53,7 @@ class Agent:
                         self.session.context_manager.set_latest_usage(usage)
                         self.session.context_manager.add_usage(usage)
 
-                tool_schemas = self.session.tool_registry.get_schemas()
+                tool_schemas = self.session.tool_registry.get_schemas(mode=self.session.mode)
 
                 # LLM call with retry on stream errors
                 response_text = ""

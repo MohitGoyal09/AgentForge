@@ -2,6 +2,7 @@ from agent.agent import Agent
 import asyncio
 from typing import Any
 from agent.events import AgentEventType
+from agent.modes import AgentMode
 from config.config import ApprovalPolicy, Config
 from ui.tui import TUI, get_console
 
@@ -26,8 +27,9 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /skills /skill /unskill /tools /mcp /stats /exit",
+                "commands: /help /plan /build /skills /tools /mcp /stats /exit",
             ],
+            mode=AgentMode.BUILD.value,
         )
 
         async with Agent(config=self.config) as agent:
@@ -35,7 +37,12 @@ class CLI:
 
             while True:
                 try:
-                    user_input = console.input("\n[user]>[/user] ").strip()
+                    mode_tag = ""
+                    if self.agent and self.agent.session:
+                        m = self.agent.session.mode.value
+                        color = "tool.read" if m == "plan" else "tool.shell"
+                        mode_tag = f"[{color}]{m}[/{color}]"
+                    user_input = console.input(f"\n{mode_tag}[user]>[/user] ").strip()
                     if not user_input:
                         continue
                     if user_input.startswith("/"):
@@ -207,6 +214,17 @@ class CLI:
             self.agent.session.restore_snapshot(snapshot)
             self.tui.show_notice(f"Restored checkpoint: {argument}")
             return True
+        if name == "/plan":
+            if self.agent and self.agent.session:
+                self.agent.session.set_mode(AgentMode.PLAN)
+                self.tui.show_mode(AgentMode.PLAN.value)
+            return True
+        if name == "/build":
+            if self.agent and self.agent.session:
+                self.agent.session.set_mode(AgentMode.BUILD)
+                self.tui.show_mode(AgentMode.BUILD.value)
+            return True
+
         if name == "/stats":
             if self.agent:
                 usage = self.agent.session.context_manager.get_total_usage()

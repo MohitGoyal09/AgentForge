@@ -2,6 +2,7 @@ from datetime import datetime
 import json
 import uuid
 from typing import Any
+from agent.modes import AgentMode
 from client.llm_client import LLMClient
 from config.config import Config
 from config.loader import get_data_dir
@@ -41,6 +42,7 @@ class Session:
         self._turn_count = 0
         self._event_sequence = 0
         self._memory_cache: str | None = None
+        self.mode: AgentMode = AgentMode.BUILD
     
     async def initialize(self) -> None:
         await self.mcp_manager.initialize()
@@ -50,12 +52,31 @@ class Session:
         self.context_manager = ContextManager(
             config=self.config,
             user_memory=self._load_memory(),
-            tools=self.tool_registry.get_tools(),
+            tools=self.tool_registry.get_tools(mode=self.mode),
+            skills=self.skills_manager.list_skills(),
+            active_skills=self.active_skills,
+            active_skill_bodies=self.skills_manager.get_active_skill_bodies(self.active_skills),
+            mode=self.mode,
+        )
+
+
+    def set_mode(self, mode: AgentMode) -> None:
+        if self.mode == mode:
+            return
+        self.mode = mode
+        self._refresh_mode()
+
+    def _refresh_mode(self) -> None:
+        if not self.context_manager:
+            return
+        filtered_tools = self.tool_registry.get_tools(mode=self.mode)
+        self.context_manager.refresh_system_prompt(
+            tools=filtered_tools,
+            mode=self.mode,
             skills=self.skills_manager.list_skills(),
             active_skills=self.active_skills,
             active_skill_bodies=self.skills_manager.get_active_skill_bodies(self.active_skills),
         )
-
 
     def increment_turn(self) -> int:
         self._turn_count += 1
@@ -153,7 +174,10 @@ class Session:
     def _refresh_skill_prompt(self) -> None:
         if not self.context_manager:
             return
+        filtered_tools = self.tool_registry.get_tools(mode=self.mode)
         self.context_manager.refresh_system_prompt(
+            tools=filtered_tools,
+            mode=self.mode,
             skills=self.skills_manager.list_skills(),
             active_skills=self.active_skills,
             active_skill_bodies=self.skills_manager.get_active_skill_bodies(self.active_skills),

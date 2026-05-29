@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
+from agent.modes import AgentMode
 from client.response import TokenUsage
 from config.config import Config
 from prompts.system import get_system_prompt
@@ -67,6 +68,7 @@ class ContextManager:
         skills: list[SkillMetadata] | None = None,
         active_skills: list[str] | None = None,
         active_skill_bodies: dict[str, str] | None = None,
+        mode: AgentMode = AgentMode.BUILD,
     ):
         self.config = config
         self._user_memory = user_memory
@@ -74,6 +76,7 @@ class ContextManager:
         self._skills = skills or []
         self._active_skills = active_skills or []
         self._active_skill_bodies = active_skill_bodies or {}
+        self._mode = mode
         self._system_prompt = get_system_prompt(
             config=config,
             user_memory=user_memory,
@@ -81,6 +84,7 @@ class ContextManager:
             skills=self._skills,
             active_skills=self._active_skills,
             active_skill_bodies=self._active_skill_bodies,
+            mode=mode,
         )
         self._model_name = self.config.model_name
         self._prune_protect_tokens: int = config.max_tool_output_tokens
@@ -242,6 +246,8 @@ The previous conversation was compacted due to context length limits.
         skills: list[SkillMetadata] | None = None,
         active_skills: list[str] | None = None,
         active_skill_bodies: dict[str, str] | None = None,
+        mode: AgentMode | None = None,
+        tools: list | None = None,
     ) -> None:
         if skills is not None:
             self._skills = skills
@@ -249,6 +255,10 @@ The previous conversation was compacted due to context length limits.
             self._active_skills = active_skills
         if active_skill_bodies is not None:
             self._active_skill_bodies = active_skill_bodies
+        if mode is not None:
+            self._mode = mode
+        if tools is not None:
+            self._tools = tools
 
         self._system_prompt = get_system_prompt(
             config=self.config,
@@ -257,6 +267,7 @@ The previous conversation was compacted due to context length limits.
             skills=self._skills,
             active_skills=self._active_skills,
             active_skill_bodies=self._active_skill_bodies,
+            mode=self._mode,
         )
 
 
