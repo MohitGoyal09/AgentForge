@@ -77,6 +77,7 @@ class HookConfig(BaseModel):
     script : str | None = None
     timeout_sec : float = 30
     enabled : bool = True
+    fail_closed: bool = False
 
     @model_validator(mode="after")
     def validate_hook(self) -> HookConfig:

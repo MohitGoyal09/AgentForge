@@ -1,11 +1,15 @@
+from __future__ import annotations
 from datetime import datetime
 from client.response import TokenUsage
 from config.config import Config
 from prompts.system import get_system_prompt
 from dataclasses import dataclass, field
 from utils.text import count_tokens
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from skills.manager import SkillMetadata
+
+if TYPE_CHECKING:
+    from context.compaction import ChatCompactor
 
 
 @dataclass
@@ -55,9 +59,6 @@ class MessageItem:
 
 
 class ContextManager:
-    PRUNE_PROTECT_TOKENS = 40_000
-    PRUNE_MINIMUM_TOKENS = 20_000
-
     def __init__(
         self,
         config: Config,
@@ -82,6 +83,8 @@ class ContextManager:
             active_skill_bodies=self._active_skill_bodies,
         )
         self._model_name = self.config.model_name
+        self._prune_protect_tokens: int = config.max_tool_output_tokens
+        self._prune_minimum_tokens: int = config.max_tool_output_tokens // 2
         self._messages: list[MessageItem] = []
         self._latest_usage = TokenUsage()
         self._total_usage = TokenUsage()
@@ -124,11 +127,17 @@ class ContextManager:
         return messages
     
     def needs_compression(self) -> bool:
-
         context_limit = self.config.model.context_window
-        current_tokens = self._latest_usage.total_tokens
-
+        current_tokens = self._estimate_current_tokens()
         return current_tokens > context_limit
+
+    def _estimate_current_tokens(self) -> int:
+        total = 0
+        if self._system_prompt:
+            total += count_tokens(self._system_prompt, self._model_name)
+        for msg in self._messages:
+            total += msg.token_count or count_tokens(msg.content, self._model_name)
+        return total
     
     def set_latest_usage(self, usage: TokenUsage):
         self._latest_usage = usage
@@ -136,55 +145,43 @@ class ContextManager:
     def add_usage(self, usage: TokenUsage):
         self._total_usage += usage
     
-    def replace_with_summary(self, summary: str) -> None:
-        self._messages = []
+    _KEEP_RECENT_TURNS = 5
 
+    def replace_with_summary(self, summary: str, recent_messages: list[MessageItem] | None = None) -> None:
         continuation_content = f"""# Context Restoration (Previous Session Compacted)
 
-        The previous conversation was compacted due to context length limits. Below is a detailed summary of the work done so far. 
+The previous conversation was compacted due to context length limits.
 
-        **CRITICAL: Actions listed under "COMPLETED ACTIONS" are already done. DO NOT repeat them.**
+{summary}
 
-        ---
+**CRITICAL: Actions listed above as completed are already done. DO NOT repeat them.**"""
 
-        {summary}
-
-        ---
-
-        Resume work from where we left off. Focus ONLY on the remaining tasks."""
-
-        summary_item = MessageItem(
+        self._messages = [MessageItem(
             role="user",
             content=continuation_content,
             token_count=count_tokens(continuation_content, self._model_name),
-        )
-        self._messages.append(summary_item)
+        )]
 
-        ack_content = """I've reviewed the context from the previous session. I understand:
-- The original goal and what was requested
-- Which actions are ALREADY COMPLETED (I will NOT repeat these)
-- The current state of the project
-- What still needs to be done
+        if recent_messages:
+            self._messages.extend(recent_messages)
 
-I'll continue with the REMAINING tasks only, starting from where we left off."""
-        ack_item = MessageItem(
-            role="assistant",
-            content=ack_content,
-            token_count=count_tokens(ack_content, self._model_name),
-        )
-        self._messages.append(ack_item)
+    def compress_old_messages(self, compactor: ChatCompactor) -> tuple[str | None, TokenUsage | None]:
+        if len(self._messages) <= self._KEEP_RECENT_TURNS:
+            return None, None
 
-        continue_content = (
-            "Continue with the REMAINING work only. Do NOT repeat any completed actions. "
-            "Proceed with the next step as described in the context above."
-        )
+        split_index = len(self._messages) - self._KEEP_RECENT_TURNS
+        recent_messages = self._messages[split_index:]
+        old_messages = self._messages[:split_index]
 
-        continue_item = MessageItem(
-            role="user",
-            content=continue_content,
-            token_count=count_tokens(continue_content, self._model_name),
-        )
-        self._messages.append(continue_item)
+        old_dicts = [{"role": "user", "content": m.content} for m in old_messages]
+        full_dicts = self.get_messages()
+
+        summary, usage = compactor.compress(self, messages=old_dicts)
+
+        if summary:
+            self.replace_with_summary(summary, recent_messages=recent_messages)
+
+        return summary, usage
     
     def prune_tool_outputs(self) -> int:
         user_message_count = sum(1 for msg in self._messages if msg.role == 'user')
@@ -201,14 +198,14 @@ I'll continue with the REMAINING tasks only, starting from where we left off."""
                     continue
 
                 tokens = msg.token_count or count_tokens(msg.content , self._model_name)
-                if protected_tokens < self.PRUNE_PROTECT_TOKENS:
+                if protected_tokens < self._prune_protect_tokens:
                     protected_tokens += tokens
                     continue
 
                 pruned_tokens += tokens
                 to_prune.append(msg)
 
-        if pruned_tokens < self.PRUNE_MINIMUM_TOKENS:
+        if pruned_tokens < self._prune_minimum_tokens:
             return 0
         
         pruned_count = 0

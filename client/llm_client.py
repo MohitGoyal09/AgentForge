@@ -1,4 +1,4 @@
-from ast import arguments
+import random
 from typing import Any, AsyncGenerator
 from openai import APIConnectionError, AsyncOpenAI , RateLimitError , APIError
 
@@ -83,7 +83,7 @@ class LLMClient:
             except RateLimitError as e:
                 
                 if attempt < self._max_retries:
-                    wait_time = 2 ** attempt
+                    wait_time = 2 ** attempt + random.uniform(0, 1)
                     await asyncio.sleep(wait_time)
                    
                 else:
@@ -94,7 +94,7 @@ class LLMClient:
 
             except APIConnectionError as e:
                 if attempt < self._max_retries:
-                    wait_time = 2 ** attempt
+                    wait_time = 2 ** attempt + random.uniform(0, 1)
                     await asyncio.sleep(wait_time)
                    
                 else:
@@ -104,7 +104,7 @@ class LLMClient:
                     return
             except APIError as e:
                 if attempt < self._max_retries:
-                    wait_time = 2 ** attempt
+                    wait_time = 2 ** attempt + random.uniform(0, 1)
                     await asyncio.sleep(wait_time)
                    
                 else:

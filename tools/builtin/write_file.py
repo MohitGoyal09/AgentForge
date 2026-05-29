@@ -84,7 +84,9 @@ class WriteFileTool(Tool):
                 ensure_parent_directory(path)
             elif not path.parent.exists():
                 return ToolResult.error_result(
-                    f"Parent directory does not exist: {path.parent}"
+                    f"Parent directory does not exist: {path.parent}",
+                    summary=f"Parent directory not found: {path.parent}",
+                    recovery_hint="Set create_directories=True to auto-create parent directories.",
                 )
 
             path.write_text(params.content, encoding="utf-8")
@@ -94,6 +96,9 @@ class WriteFileTool(Tool):
 
             return ToolResult.success_result(
                 f"{action} {path} {line_count} lines",
+                summary=f"{action} {path} ({line_count} lines)",
+                artifacts=[str(path)],
+                next_actions=[f"Use read_file to verify the written content: {path}"],
                 diff_text=FileDiff(
                     path=path,
                     old_content=old_content,
@@ -108,4 +113,8 @@ class WriteFileTool(Tool):
                 },
             )
         except OSError as e:
-            return ToolResult.error_result(f"Failed to write file: {e}")
+            return ToolResult.error_result(
+                f"Failed to write file: {e}",
+                summary=f"Failed to write: {path}",
+                recovery_hint="Check directory permissions and disk space, then retry.",
+            )

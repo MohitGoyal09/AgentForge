@@ -71,7 +71,7 @@ class ToolRegistry:
         tool = self.get(name)
         if tool is None:
             result = ToolResult.error_result(
-                f"Unkown tool: {name}", metadata={"tool_name": name}
+                f"Unknown tool: {name}", metadata={"tool_name": name}
             )
             await hook_system.trigger_after_tool(name, params, result)
             return result
@@ -79,7 +79,7 @@ class ToolRegistry:
         validation_errors = tool.validate_params(params)
         if validation_errors:
             result =  ToolResult.error_result(
-                f"Invalid Parametere : {'; '.join(validation_errors)}",
+                f"Invalid Parameter: {'; '.join(validation_errors)}",
                 metadata={
                     "tool_name": name,
                     "validation_errors": validation_errors,
@@ -136,7 +136,7 @@ class ToolRegistry:
         return result
 
 
-def create_default_registery(config: Config) -> ToolRegistry:
+def create_default_registry(config: Config) -> ToolRegistry:
     from tools.subagents import SubagentDefinition
 
     registry = ToolRegistry(config)

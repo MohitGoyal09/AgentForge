@@ -1,10 +1,8 @@
-import os
-from pathlib import Path
 import re
 from tools.base import Tool, ToolInvocation, ToolKind, ToolResult
 from pydantic import BaseModel, Field
 
-from utils.paths import is_binary_file, resolve_path
+from utils.paths import find_source_files, resolve_path
 
 
 class GrepParams(BaseModel):
@@ -30,16 +28,24 @@ class GrepTool(Tool):
         search_path = resolve_path(invocation.cwd, params.path)
 
         if not search_path.exists():
-            return ToolResult.error_result(f"Path does not exist: {search_path}")
+            return ToolResult.error_result(
+                f"Path does not exist: {search_path}",
+                summary=f"Path not found: {search_path}",
+                recovery_hint="Verify the path with glob or list_dir, then retry.",
+            )
 
         try:
             flags = re.IGNORECASE if params.case_insensitive else 0
             pattern = re.compile(params.pattern, flags)
         except re.error as e:
-            return ToolResult.error_result(f"Invalid regex pattern: {e}")
+            return ToolResult.error_result(
+                f"Invalid regex pattern: {e}",
+                summary="Invalid regex pattern",
+                recovery_hint="Fix the regex syntax and retry. Use a simpler pattern if unsure.",
+            )
 
         if search_path.is_dir():
-            files = self._find_files(search_path)
+            files = find_source_files(search_path)
         else:
             files = [search_path]
 
@@ -55,13 +61,6 @@ class GrepTool(Tool):
             lines = content.splitlines()
             file_matches = False
 
-            # === path.py ===
-            # 1: async def execute()
-            # 30: async def execute()
-
-            # === path2.py ===
-            # 1: async def execute()
-            # 30: async def execute()
             for i, line in enumerate(lines, start=1):
                 if pattern.search(line):
                     matches += 1
@@ -78,6 +77,7 @@ class GrepTool(Tool):
         if not output_lines:
             return ToolResult.success_result(
                 f"No matches found for pattern '{params.pattern}'",
+                summary=f"No matches for '{params.pattern}' in {search_path}",
                 metadata={
                     "path": str(search_path),
                     "matches": 0,
@@ -87,6 +87,7 @@ class GrepTool(Tool):
 
         return ToolResult.success_result(
             "\n".join(output_lines),
+            summary=f"Found {matches} match(es) in {len(files)} file(s) for '{params.pattern}'",
             metadata={
                 "path": str(search_path),
                 "matches": matches,
@@ -94,24 +95,3 @@ class GrepTool(Tool):
             },
         )
 
-    def _find_files(self, search_path: Path) -> list[Path]:
-        files = []
-
-        for root, dirs, filenames in os.walk(search_path):
-            dirs[:] = [
-                d
-                for d in dirs
-                if d not in {"node_modules", "__pycache__", ".git", ".venv", "venv"}
-            ]
-
-            for filename in filenames:
-                if filename.startswith("."):
-                    continue
-
-                file_path = Path(root) / filename
-                if not is_binary_file(file_path):
-                    files.append(file_path)
-                    if len(files) >= 500:
-                        return files
-
-        return files

@@ -2,8 +2,6 @@
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from re import IGNORECASE
-from socket import IP_DEFAULT_MULTICAST_TTL
 from typing import Any, Awaitable, Callable
 from config.config import ApprovalPolicy
 from tools.base import ToolConfirmation
@@ -160,8 +158,9 @@ class ApprovalManager:
             if confirmation.affected_paths:
                 for p in confirmation.affected_paths:
                     console.print(f"  Path: {p}")
-            if confirmation.diff_text:
-                console.print(confirmation.diff_text)
+            diff_text = confirmation.get_diff_text()
+            if diff_text:
+                console.print(diff_text)
             response = console.input("\n[bold]Approve? (y/n): [/bold]").strip().lower()
             return response in ("y", "yes")
         except Exception:

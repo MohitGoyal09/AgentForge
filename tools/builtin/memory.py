@@ -49,48 +49,67 @@ class MemoryTool(Tool):
         if params.action.lower() == "set":
             if not params.key or not params.value:
                 return ToolResult.error_result(
-                    "`key` and `value` are required for 'set' action"
+                    "`key` and `value` are required for 'set' action",
+                    summary="Missing key or value for set",
                 )
             memory = self._load_memory()
             memory["entries"][params.key] = params.value
             self._save_memory(memory)
 
-            return ToolResult.success_result(f"Set memory: {params.key}")
+            return ToolResult.success_result(
+                f"Set memory: {params.key}",
+                summary=f"Memory set: {params.key}",
+            )
         elif params.action.lower() == "get":
             if not params.key:
-                return ToolResult.error_result("`key` required for 'get' action")
+                return ToolResult.error_result(
+                    "`key` required for 'get' action",
+                    summary="Missing key for get",
+                )
 
             memory = self._load_memory()
             if params.key not in memory.get("entries", {}):
                 return ToolResult.success_result(
                     f"Memory not found: {params.key}",
+                    summary=f"Memory key not found: {params.key}",
                     metadata={
                         "found": False,
                     },
                 )
             return ToolResult.success_result(
                 f"Memory found: {params.key}: {memory['entries'][params.key]}",
+                summary=f"Memory retrieved: {params.key}",
                 metadata={
                     "found": True,
                 },
             )
         elif params.action == "delete":
             if not params.key:
-                return ToolResult.error_result("`key` required for 'get' action")
+                return ToolResult.error_result(
+                    "`key` required for 'delete' action",
+                    summary="Missing key for delete",
+                )
             memory = self._load_memory()
             if params.key not in memory.get("entries", {}):
-                return ToolResult.success_result(f"Memory not found: {params.key}")
+                return ToolResult.success_result(
+                    f"Memory not found: {params.key}",
+                    summary=f"Nothing to delete: {params.key} not found",
+                )
 
             del memory["entries"][params.key]
             self._save_memory(memory)
 
-            return ToolResult.success_result(f"Deleted memory: {params.key}")
+            return ToolResult.success_result(
+                f"Deleted memory: {params.key}",
+                summary=f"Memory deleted: {params.key}",
+            )
         elif params.action == "list":
             memory = self._load_memory()
             entries = memory.get("entries", {})
             if not entries:
                 return ToolResult.success_result(
                     f"No memories stored",
+                    summary="No stored memories",
                     metadata={
                         "found": False,
                     },
@@ -101,6 +120,7 @@ class MemoryTool(Tool):
 
             return ToolResult.success_result(
                 "\n".join(lines),
+                summary=f"{len(entries)} stored memory/memories",
                 metadata={
                     "found": True,
                 },
@@ -110,6 +130,13 @@ class MemoryTool(Tool):
             count = len(memory.get("entries", {}))
             memory["entries"] = {}
             self._save_memory(memory)
-            return ToolResult.success_result(f"Cleared {count} memory entries")
+            return ToolResult.success_result(
+                f"Cleared {count} memory entries",
+                summary=f"Cleared {count} memory entries",
+            )
         else:
-            return ToolResult.error_result(f"Unknown action: {params.action}")
+            return ToolResult.error_result(
+                f"Unknown action: {params.action}",
+                summary=f"Unknown action: {params.action}",
+                recovery_hint="Valid actions: set, get, delete, list, clear.",
+            )

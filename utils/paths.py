@@ -1,4 +1,21 @@
+import os
 from pathlib import Path
+
+EXCLUDED_DIRS = {"node_modules", "__pycache__", ".git", ".venv", "venv"}
+
+def find_source_files(search_path: Path, max_files: int = 500) -> list[Path]:
+    files: list[Path] = []
+    for root, dirs, filenames in os.walk(search_path):
+        dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+        for filename in filenames:
+            if filename.startswith("."):
+                continue
+            file_path = Path(root) / filename
+            if not is_binary_file(file_path):
+                files.append(file_path)
+                if len(files) >= max_files:
+                    return files
+    return files
 
 def resolve_path(base : str | Path , path : str | Path):
     path = Path(path)

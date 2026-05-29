@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import signal
 import sys
@@ -7,6 +8,8 @@ import tempfile
 from typing import Any
 from config.config import Config, HookConfig, HookTrigger
 from tools.base import ToolResult
+
+logger = logging.getLogger(__name__)
 
 
 class HookSystem:
@@ -33,7 +36,9 @@ class HookSystem:
                 finally:
                     os.unlink(script_path)
         except Exception as e:
-            print(e)
+            logger.warning("Hook '%s' failed: %s", hook.name, e)
+            if hook.fail_closed:
+                raise
 
     async def _run_command(
         self,

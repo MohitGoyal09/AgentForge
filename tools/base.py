@@ -1,8 +1,7 @@
 from __future__ import annotations
 import abc
-import json
 from typing import Any
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, PrivateAttr, ValidationError
 from pathlib import Path
 from dataclasses import dataclass, field
 
@@ -25,6 +24,8 @@ class ToolKind(str, Enum):
 class ToolInvocation(BaseModel):
     params: dict[str, Any]
     cwd: Path
+
+    _event_handler: Any | None = PrivateAttr(None)
 
 
 @dataclass
@@ -62,6 +63,7 @@ class FileDiff:
 
 class ToolResult(BaseModel):
     success: bool
+    status: str = "success"
     output: str
     error: str | None = None
     truncated: bool = False
@@ -76,11 +78,11 @@ class ToolResult(BaseModel):
 
     @classmethod
     def error_result(cls, error: str, output: str = "", **kwargs: Any):
-        return cls(success=False, output=output, error=error, **kwargs)
+        return cls(success=False, status="error", output=output, error=error, **kwargs)
 
     @classmethod
     def success_result(cls, output: str, **kwargs: Any):
-        return cls(success=True, output=output, error=None, **kwargs)
+        return cls(success=True, status="success", output=output, error=None, **kwargs)
 
     def _default_summary(self) -> str:
         if self.summary:
@@ -92,18 +94,9 @@ class ToolResult(BaseModel):
         return ""
 
     def to_model_output(self) -> str:
-        observation = {
-            "status": "success" if self.success else "error",
-            "summary": self._default_summary(),
-            "artifacts": self.artifacts,
-            "next_actions": self.next_actions,
-            "recovery_hint": self.recovery_hint,
-        }
-
         if self.success:
-            return f"{self.output}\n\n[tool_observation]\n{json.dumps(observation)}"
-
-        return f"Error : {self.error}\n\nOutput:\n{self.output}\n\n[tool_observation]\n{json.dumps(observation)}"
+            return self.output
+        return f"Error: {self.error}\n\nOutput:\n{self.output}"
 
 
 class ToolConfirmation(BaseModel):
@@ -112,10 +105,14 @@ class ToolConfirmation(BaseModel):
     description: str
 
     diff : FileDiff | None = None
-    diff_text: str | None = None
     affected_paths : list[Path] = field(default_factory=list)
     command : str | None = None
     is_dangerous : bool = False
+
+    def get_diff_text(self) -> str | None:
+        if self.diff:
+            return self.diff.to_diff()
+        return None
 
 
 class Tool(abc.ABC):
@@ -161,13 +158,13 @@ class Tool(abc.ABC):
         }
 
     async def get_confirmation(
-        self, innvocation: ToolInvocation
+        self, invocation: ToolInvocation
     ) -> ToolConfirmation | None:
-        if not self.is_mutating(innvocation.params):
+        if not self.is_mutating(invocation.params):
             return None
         return ToolConfirmation(
             tool_name=self.name,
-            params=innvocation.params,
+            params=invocation.params,
             description=f"Execute {self.name}",
         )
 
@@ -198,4 +195,4 @@ class Tool(abc.ABC):
 
             return result
 
-        raise ValueError(f"Invalide schema type for tool {self.name}: {type(schema)}")
+        raise ValueError(f"Invalid schema type for tool {self.name}: {type(schema)}")

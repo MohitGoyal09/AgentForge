@@ -87,7 +87,7 @@ class SubagentTool(Tool):
         terminate_response = "goal"
 
        
-        event_handler = getattr(invocation, '_event_handler', None)
+        event_handler = invocation._event_handler
 
         try:
             async with Agent(subagent_config) as agent:

@@ -105,3 +105,13 @@
 [HOOK] {"timestamp": "2026-05-29T16:06:03.790142", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
 [HOOK] {"timestamp": "2026-05-29T16:06:08.703549", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
 [HOOK] {"timestamp": "2026-05-29T16:06:31.227362", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:10:18.661528", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "hi", "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:19:22.155955", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "use frontend-desgin skill and build me good landing page", "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:19:28.293550", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "list_dir", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:19:44.806029", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "glob", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:20:13.456191", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "filesystem__create_directory", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:21:25.528963", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "write_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:35:29.787603", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "use frontend-desgin skill and build me good landing page", "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:35:46.537778", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "list_dir", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:36:00.525719", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "glob", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-05-30T00:36:06.660506", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "list_dir", "user_message": null, "error": null}

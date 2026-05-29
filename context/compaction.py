@@ -55,9 +55,9 @@ class ChatCompactor:
         return "\n\n---\n\n".join(output)
 
     async def compress(
-        self, context_manager: ContextManager
+        self, context_manager: ContextManager, messages: list[dict[str, Any]] | None = None
     ) -> tuple[str | None, TokenUsage | None]:
-        messages = context_manager.get_messages()
+        messages = messages or context_manager.get_messages()
 
         if len(messages) < 3:
             return None, None

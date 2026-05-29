@@ -126,7 +126,9 @@ class EditTool(Tool):
         if not path.exists():
             if params.old_string:
                 return ToolResult.error_result(
-                    f"File does not exist: {path}. To create a new file, use an empty old_string."
+                    f"File does not exist: {path}. To create a new file, use an empty old_string.",
+                    summary=f"File not found: {path}",
+                    recovery_hint="Check the path with list_dir or glob, or set old_string='' to create a new file.",
                 )
             ensure_parent_directory(path)
             path.write_text(params.new_string,encoding='utf-8')
@@ -135,6 +137,9 @@ class EditTool(Tool):
 
             return ToolResult.success_result(
                 f"Created {path} {line_count} lines",
+                summary=f"Created {path} ({line_count} lines)",
+                artifacts=[str(path)],
+                next_actions=[f"Use read_file to verify: {path}"],
                 diff_text=FileDiff(
                     path = path,
                     old_content="",
@@ -152,7 +157,9 @@ class EditTool(Tool):
 
         if not params.old_string:
             return ToolResult.error_result(
-                "old_string is empty but file exists . Provide old_string to edit , or use write tool to overwrite "
+                "old_string is empty but file exists . Provide old_string to edit , or use write tool to overwrite ",
+                summary="Empty old_string for existing file",
+                recovery_hint="Provide the exact text to replace as old_string, or use write_file to overwrite the whole file.",
             )
         
         occurrence_count = old_content.count(params.old_string)
@@ -164,8 +171,10 @@ class EditTool(Tool):
             return ToolResult.error_result(
                 f"old_string found {occurrence_count} times in {path}. "
                 f"Either: \n"
-                f"1. Provide more context ot make the match unqiue or \n"
-                f"2. Set replace_all = True to replade all occurences",
+                f"1. Provide more context to make the match unique or \n"
+                f"2. Set replace_all = True to replace all occurrences",
+                summary=f"old_string found {occurrence_count} times in {path}",
+                recovery_hint="Set replace_all=True to replace all occurrences, or provide more context in old_string for a unique match.",
                 metadata = {
                     "occurrence_count": occurrence_count,
 
@@ -180,13 +189,19 @@ class EditTool(Tool):
         
         if new_content == old_content:
             return ToolResult.error_result(
-                "No change made - old_string equals new_string"
+                "No change made - old_string equals new_string",
+                summary="No change: old_string and new_string are identical",
+                recovery_hint="Modify new_string to differ from old_string to make a change.",
             )
         
         try:
             path.write_text(new_content, encoding="utf-8")
         except IOError as e:
-            return ToolResult.error_result(f"failed to write file: {e}")
+            return ToolResult.error_result(
+                f"failed to write file: {e}",
+                summary=f"Failed to write: {path}",
+                recovery_hint="Check file permissions and disk space, then retry.",
+            )
 
         old_lines = len(old_content.splitlines())
         new_lines = len(new_content.splitlines())
@@ -201,6 +216,9 @@ class EditTool(Tool):
 
         return ToolResult.success_result(
             f"Edited {path}: replaced {replace_count} occurrence(s){diff_msg}",
+            summary=f"Edited {path}: {replace_count} replacement(s){diff_msg}",
+            artifacts=[str(path)],
+            next_actions=[f"Use read_file to verify the edit: {path}"],
             diff_text=FileDiff(path=path, old_content=old_content, new_content=new_content).to_diff(),
             metadata={
                 "path": str(path),

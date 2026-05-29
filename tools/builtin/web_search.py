@@ -32,23 +32,30 @@ class WebSearchTool(Tool):
                 backend="auto",
             )
         except Exception as e:
-            return ToolResult.error_result(f"Search failed: {e}")
+            return ToolResult.error_result(
+                f"Search failed: {e}",
+                summary="Web search failed",
+                recovery_hint="Check network connectivity, then retry. Simplify the query if needed.",
+            )
 
         if not results:
             return ToolResult.success_result(
                 f"No results found for: {params.query}",
+                summary=f"No search results for '{params.query}'",
                 metadata={
                     "results": 0,
                 },
             )
 
         output_lines = [f"Search results for: {params.query}"]
+        result_urls = []
 
         limited_results = list(results)[: params.max_results]
 
         for i, result in enumerate(limited_results, start=1):
             output_lines.append(f"{i}. Title: {result['title']}")
             output_lines.append(f"   URL: {result['href']}")
+            result_urls.append(result['href'])
             if result.get("body"):
                 output_lines.append(f"   Snippet: {result['body']}")
 
@@ -56,6 +63,9 @@ class WebSearchTool(Tool):
 
         return ToolResult.success_result(
             "\n".join(output_lines),
+            summary=f"Found {len(limited_results)} result(s) for '{params.query}'",
+            artifacts=result_urls[:10],
+            next_actions=["Use web_fetch to read content from a specific result URL."],
             metadata={
                 "results": len(limited_results),
             },

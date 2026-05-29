@@ -839,15 +839,17 @@ class TUI:
                     word_wrap=True,
                 )
             )
-        elif confirmation.diff_text:
-            output.append(
-                Syntax(
-                    confirmation.diff_text,
-                    "diff",
-                    theme="monokai",
-                    word_wrap=True,
+        else:
+            diff_text = confirmation.get_diff_text()
+            if diff_text:
+                output.append(
+                    Syntax(
+                        diff_text,
+                        "diff",
+                        theme="monokai",
+                        word_wrap=True,
+                    )
                 )
-            )
 
         self.console.print()
         self.console.print(

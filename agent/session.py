@@ -14,14 +14,14 @@ from safety.approval import ApprovalManager
 from tools.discovery import ToolDiscoveryManager
 from skills.manager import SkillManager
 from tools.mcp.mcp_manager import MCPManager
-from tools.registry import create_default_registery
+from tools.registry import create_default_registry
 
 
 class Session:
     def __init__(self, config: Config, persistence: PersistenceManager | None = None):
         self.config = config
         self.client = LLMClient(config=config)
-        self.tool_registry = create_default_registery(config=config)
+        self.tool_registry = create_default_registry(config=config)
         self.context_manager: ContextManager | None = None
         self.discovery_manager = ToolDiscoveryManager(
             self.config,
@@ -40,6 +40,7 @@ class Session:
         self.updated_at = datetime.now()
         self._turn_count = 0
         self._event_sequence = 0
+        self._memory_cache: str | None = None
     
     async def initialize(self) -> None:
         await self.mcp_manager.initialize()
@@ -173,11 +174,15 @@ class Session:
         return value
 
     def _load_memory(self) -> str | None:
+        if self._memory_cache is not None:
+            return self._memory_cache
+
         data_dir = get_data_dir()
         data_dir.mkdir(parents=True, exist_ok=True)
         path = data_dir / "user_memory.json"
 
         if not path.exists():
+            self._memory_cache = None
             return None
 
         try:
@@ -185,12 +190,15 @@ class Session:
             data = json.loads(content)
             entries = data.get("entries")
             if not entries:
+                self._memory_cache = None
                 return None
 
             lines = ["User preferences and notes:"]
             for key, value in entries.items():
                 lines.append(f"- {key}: {value}")
 
-            return "\n".join(lines)
+            self._memory_cache = "\n".join(lines)
+            return self._memory_cache
         except Exception:
+            self._memory_cache = None
             return None

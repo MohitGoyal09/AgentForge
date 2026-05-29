@@ -104,7 +104,11 @@ class ShellTool(Tool):
             cwd = invocation.cwd
 
         if not cwd.exists():
-            return ToolResult.error_result(f"Working directory doesn't exist: {cwd}")
+            return ToolResult.error_result(
+                f"Working directory doesn't exist: {cwd}",
+                summary=f"Working directory not found: {cwd}",
+                recovery_hint="Provide a valid cwd that exists, or omit cwd to use the default working directory.",
+            )
 
         env = self._build_environment()
         if sys.platform == "win32":
@@ -151,10 +155,17 @@ class ShellTool(Tool):
         if len(output) > 100 * 1024:
             output = output[: 100 * 1024] + "\n... [output truncated]"
 
-        return ToolResult(
-            success=exit_code == 0,
+        if exit_code == 0:
+            return ToolResult.success_result(
+                output,
+                summary=f"Command completed (exit 0)",
+                exit_code=exit_code,
+            )
+        return ToolResult.error_result(
+            stderr if stderr else f"Command failed (exit {exit_code})",
             output=output,
-            error=stderr if exit_code != 0 else None,
+            summary=f"Command failed (exit {exit_code})",
+            recovery_hint="Check the command syntax, working directory, and file permissions. Use a simpler command to debug.",
             exit_code=exit_code,
         )
 

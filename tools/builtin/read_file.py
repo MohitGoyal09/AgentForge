@@ -63,7 +63,9 @@ class ReadFileTool(Tool):
         if file_size > self.MAX_FILE_SIZE:
             return ToolResult.error_result(
                 f"File too large ({file_size / (1024*1024):.1f}MB). "
-                f"Maximum is {self.MAX_FILE_SIZE / (1024*1024):.0f}MB."
+                f"Maximum is {self.MAX_FILE_SIZE / (1024*1024):.0f}MB.",
+                summary=f"File too large: {path} ({file_size / (1024*1024):.1f}MB)",
+                recovery_hint="Use offset and limit parameters to read portions of the file, or use shell to read with head/tail.",
             )
 
         if is_binary_file(path):
