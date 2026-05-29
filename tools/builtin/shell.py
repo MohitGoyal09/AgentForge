@@ -94,6 +94,7 @@ class ShellTool(Tool):
                 return ToolResult.error_result(
                     f"Command blocked for safety: {params.command}",
                     metadata={"blocked": True},
+                    recovery_hint="The command was blocked by a safety filter. Use a different approach or a safer variant of the command.",
                 )
 
         if params.cwd:
@@ -136,7 +137,11 @@ class ShellTool(Tool):
             else:
                 process.kill()
             await process.wait()
-            return ToolResult.error_result(f"Command timed out after {params.timeout}s")
+            return ToolResult.error_result(
+                f"Command timed out after {params.timeout}s",
+                summary=f"Command timed out after {params.timeout}s",
+                recovery_hint="The command took too long. Try a simpler command, increase the timeout, or check if the command is waiting for input.",
+            )
         
         stdout = stdout_data.decode("utf-8" , errors='replace')
         stderr = stderr_data.decode("utf-8" , errors = "replace")
@@ -159,13 +164,17 @@ class ShellTool(Tool):
             return ToolResult.success_result(
                 output,
                 summary=f"Command completed (exit 0)",
+                next_actions=["Review the output above. If you need to manipulate files, use write_file/edit_file for precision."],
+                artifacts=[str(cwd)],
                 exit_code=exit_code,
             )
         return ToolResult.error_result(
             stderr if stderr else f"Command failed (exit {exit_code})",
             output=output,
             summary=f"Command failed (exit {exit_code})",
+            next_actions=["Check the error above, fix command syntax or environment, then retry."],
             recovery_hint="Check the command syntax, working directory, and file permissions. Use a simpler command to debug.",
+            artifacts=[str(cwd)],
             exit_code=exit_code,
         )
 

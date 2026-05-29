@@ -51,6 +51,7 @@ class MemoryTool(Tool):
                 return ToolResult.error_result(
                     "`key` and `value` are required for 'set' action",
                     summary="Missing key or value for set",
+                    recovery_hint="Provide both `key` and `value` parameters, then retry.",
                 )
             memory = self._load_memory()
             memory["entries"][params.key] = params.value
@@ -59,12 +60,15 @@ class MemoryTool(Tool):
             return ToolResult.success_result(
                 f"Set memory: {params.key}",
                 summary=f"Memory set: {params.key}",
+                next_actions=["Use 'get' to verify the stored value, or 'list' to see all memories."],
+                artifacts=[params.key],
             )
         elif params.action.lower() == "get":
             if not params.key:
                 return ToolResult.error_result(
                     "`key` required for 'get' action",
                     summary="Missing key for get",
+                    recovery_hint="Provide the `key` parameter for the memory to retrieve, then retry.",
                 )
 
             memory = self._load_memory()
@@ -72,6 +76,8 @@ class MemoryTool(Tool):
                 return ToolResult.success_result(
                     f"Memory not found: {params.key}",
                     summary=f"Memory key not found: {params.key}",
+                    next_actions=["Use 'list' to see all stored memories and find the correct key."],
+                    artifacts=[params.key],
                     metadata={
                         "found": False,
                     },
@@ -79,6 +85,8 @@ class MemoryTool(Tool):
             return ToolResult.success_result(
                 f"Memory found: {params.key}: {memory['entries'][params.key]}",
                 summary=f"Memory retrieved: {params.key}",
+                next_actions=["Use 'get' on other keys or 'set' to store new information."],
+                artifacts=[params.key],
                 metadata={
                     "found": True,
                 },
@@ -88,6 +96,7 @@ class MemoryTool(Tool):
                 return ToolResult.error_result(
                     "`key` required for 'delete' action",
                     summary="Missing key for delete",
+                    recovery_hint="Provide the `key` parameter for the memory to delete, then retry.",
                 )
             memory = self._load_memory()
             if params.key not in memory.get("entries", {}):
@@ -102,6 +111,8 @@ class MemoryTool(Tool):
             return ToolResult.success_result(
                 f"Deleted memory: {params.key}",
                 summary=f"Memory deleted: {params.key}",
+                next_actions=["Use 'list' to verify deletion, or 'set' to store new information."],
+                artifacts=[params.key],
             )
         elif params.action == "list":
             memory = self._load_memory()
@@ -121,6 +132,7 @@ class MemoryTool(Tool):
             return ToolResult.success_result(
                 "\n".join(lines),
                 summary=f"{len(entries)} stored memory/memories",
+                next_actions=["Use 'get' to read a specific memory, or 'delete' to remove one."],
                 metadata={
                     "found": True,
                 },
@@ -133,6 +145,7 @@ class MemoryTool(Tool):
             return ToolResult.success_result(
                 f"Cleared {count} memory entries",
                 summary=f"Cleared {count} memory entries",
+                next_actions=["Use 'set' to store new memories as needed."],
             )
         else:
             return ToolResult.error_result(

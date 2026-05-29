@@ -67,6 +67,7 @@ class ListDirTool(Tool):
         return ToolResult.success_result(
             "\n".join(lines),
             summary=f"Listed {len(items)} entries in {dir_path}",
+            next_actions=["Use read_file on specific files to inspect their contents."],
             artifacts=[str(dir_path)],
             metadata={
                 "path": str(dir_path),

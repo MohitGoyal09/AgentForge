@@ -82,8 +82,9 @@ class Agent:
                         elif event.type == StreamEventType.ERROR:
                             if attempt < max_llm_retries:
                                 wait = 2 ** attempt + random.uniform(0, 1)
+                                err_msg = event.error or "unknown error"
                                 yield AgentEvent.text_delta(
-                                    f"\n[LLM error, retrying in {wait:.1f}s...]"
+                                    f"\n[LLM error: {err_msg}, retrying in {wait:.1f}s...]"
                                 )
                                 await asyncio.sleep(wait)
                                 saw_error = True

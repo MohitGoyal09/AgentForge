@@ -59,6 +59,7 @@ class GlobTool(Tool):
         return ToolResult.success_result(
             "\n".join(output_lines),
             summary=f"Found {len(matches)} file(s) matching {params.pattern}",
+            next_actions=["Use read_file to inspect specific files, or grep to search within them."],
             artifacts=matched_paths[:50],
             metadata={
                 "path": str(search_path),

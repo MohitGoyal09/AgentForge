@@ -28,12 +28,15 @@ class TodosTool(Tool):
                 return ToolResult.error_result(
                     "`content` required for 'add' action",
                     summary="Missing content for add",
+                    recovery_hint="Provide the `content` parameter with the task description, then retry.",
                 )
             todo_id = str(uuid.uuid4())[:8]
             self._todos[todo_id] = params.content
             return ToolResult.success_result(
                 f"Added todo [{todo_id}]: {params.content}",
                 summary=f"Todo added: {params.content[:60]}",
+                next_actions=["Continue working through the task list. Use 'list' to view remaining todos."],
+                artifacts=[todo_id],
                 metadata={"todo_id": todo_id},
             )
         elif params.action.lower() == "complete":
@@ -41,17 +44,21 @@ class TodosTool(Tool):
                 return ToolResult.error_result(
                     "`id` required for 'complete' action",
                     summary="Missing id for complete",
+                    recovery_hint="Provide the `id` parameter with the todo ID from a list action, then retry.",
                 )
             if params.id not in self._todos:
                 return ToolResult.error_result(
                     f"Todo not found: {params.id}",
                     summary=f"Todo not found: {params.id}",
+                    recovery_hint="Use the 'list' action to see available todo IDs, then retry with a valid ID.",
                 )
 
             content = self._todos.pop(params.id)
             return ToolResult.success_result(
                 f"Completed todo [{params.id}]: {content}",
                 summary=f"Todo completed: {content[:60]}",
+                next_actions=["Use 'list' to view remaining todos, or add new todos for next steps."],
+                artifacts=[params.id],
             )
         elif params.action == "list":
             if not self._todos:
@@ -66,6 +73,7 @@ class TodosTool(Tool):
             return ToolResult.success_result(
                 "\n".join(lines),
                 summary=f"{len(self._todos)} active todo(s)",
+                next_actions=["Complete todos using the 'complete' action, or add more with 'add'."],
                 metadata={"count": len(self._todos)},
             )
         elif params.action == "clear":
@@ -74,6 +82,7 @@ class TodosTool(Tool):
             return ToolResult.success_result(
                 f"Cleared {count} todos",
                 summary=f"Cleared {count} todos",
+                next_actions=["Add new todos with the 'add' action to track remaining work."],
             )
         else:
             return ToolResult.error_result(

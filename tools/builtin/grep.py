@@ -51,6 +51,7 @@ class GrepTool(Tool):
 
         output_lines = []
         matches = 0
+        matched_file_paths: list[str] = []
 
         for file_path in files:
             try:
@@ -73,6 +74,7 @@ class GrepTool(Tool):
 
             if file_matches:
                 output_lines.append("")
+                matched_file_paths.append(str(file_path))
 
         if not output_lines:
             return ToolResult.success_result(
@@ -87,7 +89,9 @@ class GrepTool(Tool):
 
         return ToolResult.success_result(
             "\n".join(output_lines),
-            summary=f"Found {matches} match(es) in {len(files)} file(s) for '{params.pattern}'",
+            summary=f"Found {matches} match(es) in {len(matched_file_paths)} file(s) for '{params.pattern}'",
+            next_actions=["Use read_file on matching files to inspect full context."],
+            artifacts=matched_file_paths[:20],
             metadata={
                 "path": str(search_path),
                 "matches": matches,

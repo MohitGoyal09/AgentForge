@@ -26,7 +26,11 @@ class WebFetchTool(Tool):
 
         parsed = urlparse(params.url)
         if not parsed.scheme or parsed.scheme not in ("http", "https"):
-            return ToolResult.error_result("URL must be http:// or https://")
+            return ToolResult.error_result(
+                "URL must be http:// or https://",
+                summary=f"Invalid URL scheme: {params.url}",
+                recovery_hint="Ensure the URL starts with http:// or https://, then retry.",
+            )
 
         try:
             async with httpx.AsyncClient(
@@ -55,6 +59,7 @@ class WebFetchTool(Tool):
         return ToolResult.success_result(
             text,
             summary=f"Fetched {params.url} ({len(response.content)} bytes)",
+            next_actions=["Review the fetched content. Use grep or read_file on local files for further analysis."],
             artifacts=[params.url],
             metadata={
                 "status_code": response.status_code,
