@@ -7,6 +7,30 @@ import re
 
 
 _FRONTMATTER_DELIMITER = "---"
+_MATCH_STOPWORDS = {
+    "a",
+    "about",
+    "agent",
+    "ai",
+    "an",
+    "and",
+    "create",
+    "for",
+    "give",
+    "make",
+    "me",
+    "new",
+    "please",
+    "skill",
+    "skills",
+    "the",
+    "thing",
+    "things",
+    "to",
+    "use",
+    "using",
+    "with",
+}
 
 
 @dataclass(slots=True)
@@ -15,6 +39,7 @@ class SkillMetadata:
     description: str
     path: Path
     allowed_tools: list[str] | None = None
+    aliases: list[str] | None = None
 
 
 @dataclass(slots=True)
@@ -110,7 +135,7 @@ class SkillManager:
         self,
         query: str,
         limit: int = 1,
-        min_score: int = 24,
+        min_score: int = 12,
     ) -> list[SkillMatch]:
         query_tokens = self._tokenize(query)
         if not query_tokens or not self._available:
@@ -142,12 +167,14 @@ class SkillManager:
         name = frontmatter.get("name", "").strip() or folder_name
         description = self._extract_description(frontmatter, body, folder_name)
         allowed_tools = self._extract_allowed_tools(frontmatter)
+        aliases = self._extract_aliases(frontmatter, folder_name, name)
 
         return SkillMetadata(
             name=name,
             description=description,
             path=skill_file,
             allowed_tools=allowed_tools,
+            aliases=aliases,
         )
 
     def _split_frontmatter(self, text: str) -> tuple[dict[str, str], str]:
@@ -179,7 +206,15 @@ class SkillManager:
             normalized_key = key.strip().lower()
             normalized_value = value.strip()
             normalized_key = normalized_key.replace("-", "_")
-            if normalized_key in {"name", "description", "allowed_tools"}:
+            if normalized_key in {
+                "name",
+                "description",
+                "allowed_tools",
+                "aliases",
+                "alias",
+                "command_name",
+                "display_name",
+            }:
                 data[normalized_key] = normalized_value
 
         return data
@@ -232,6 +267,57 @@ class SkillManager:
             if item.strip().strip("'\"")
         ]
 
+    def _extract_aliases(
+        self,
+        frontmatter: dict[str, str],
+        folder_name: str,
+        name: str,
+    ) -> list[str] | None:
+        aliases: list[str] = []
+        for key in ("aliases", "alias"):
+            aliases.extend(self._parse_text_list(frontmatter.get(key, "")))
+
+        for key in ("command_name", "display_name"):
+            value = frontmatter.get(key, "").strip()
+            if value:
+                aliases.append(value)
+
+        if folder_name != name:
+            aliases.append(folder_name)
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for alias in aliases:
+            normalized = alias.strip()
+            if not normalized:
+                continue
+            key = self._normalize_phrase(normalized)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(normalized)
+
+        return deduped or None
+
+    def _parse_text_list(self, value: str) -> list[str]:
+        text = value.strip()
+        if not text:
+            return []
+
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                parsed = ast.literal_eval(text)
+            except (SyntaxError, ValueError):
+                parsed = None
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+
+        return [
+            item.strip().strip("'\"")
+            for item in text.split(",")
+            if item.strip().strip("'\"")
+        ]
+
     def _find_explicit_skill_matches(self, query: str) -> list[SkillMatch]:
         query_phrase = self._normalize_phrase(query)
         if not query_phrase:
@@ -239,7 +325,7 @@ class SkillManager:
 
         matches: list[SkillMatch] = []
         for skill in self.list_skills():
-            for phrase in self._skill_name_phrases(skill.name):
+            for phrase in self._skill_lookup_phrases(skill):
                 if self._contains_phrase(query_phrase, phrase):
                     matches.append(
                         SkillMatch(
@@ -251,17 +337,67 @@ class SkillManager:
                     )
                     break
 
+        if not matches and " skill " in f" {query_phrase} ":
+            matches.extend(self._find_named_skill_token_matches(query_phrase))
+
         return matches
 
-    def _skill_name_phrases(self, name: str) -> set[str]:
-        phrase = self._normalize_phrase(name)
-        phrases = {phrase} if phrase else set()
+    def _find_named_skill_token_matches(self, query_phrase: str) -> list[SkillMatch]:
+        query_tokens = self._extract_requested_skill_tokens(query_phrase)
+        if not query_tokens:
+            return []
 
-        if name.endswith("-design"):
-            phrases.add(self._normalize_phrase(name.removesuffix("-design") + " design"))
-        if name.endswith("-slides"):
-            phrases.add(self._normalize_phrase(name.removesuffix("-slides") + " slides"))
+        candidates: list[SkillMatch] = []
+        for skill in self.list_skills():
+            lookup_tokens = self._lookup_tokens(skill)
+            matching_tokens = lookup_tokens & query_tokens
+            if not matching_tokens:
+                continue
 
+            candidates.append(
+                SkillMatch(
+                    skill=skill,
+                    score=80 + len(matching_tokens),
+                    reason="named skill token",
+                    explicit=True,
+                )
+            )
+
+        if len(candidates) == 1:
+            return candidates
+        return []
+
+    def _extract_requested_skill_tokens(self, query_phrase: str) -> set[str]:
+        tokens = query_phrase.split()
+        stopwords = {
+            "a",
+            "an",
+            "and",
+            "me",
+            "please",
+            "the",
+            "use",
+            "using",
+            "with",
+        }
+        requested: set[str] = set()
+
+        for index, token in enumerate(tokens):
+            if token not in {"skill", "skills"}:
+                continue
+
+            before = tokens[max(0, index - 3) : index]
+            after = tokens[index + 1 : index + 4]
+            for candidate in [*before, *after]:
+                if candidate not in stopwords and candidate not in {"skill", "skills"}:
+                    requested.add(candidate)
+
+        return requested
+
+    def _skill_lookup_phrases(self, skill: SkillMetadata) -> set[str]:
+        phrases = {self._normalize_phrase(skill.name), self._normalize_phrase(skill.path.parent.name)}
+        for alias in skill.aliases or []:
+            phrases.add(self._normalize_phrase(alias))
         return {item for item in phrases if item}
 
     def _contains_phrase(self, query_phrase: str, phrase: str) -> bool:
@@ -270,54 +406,25 @@ class SkillManager:
     def _score_skill(self, skill: SkillMetadata, query_tokens: set[str]) -> tuple[int, str]:
         score = 0
         reasons: list[str] = []
-        skill_name_tokens = self._tokenize(skill.name)
-        skill_desc_tokens = self._tokenize(skill.description)
-        ui_query_tokens = {
-            "ui",
-            "ux",
-            "frontend",
-            "frontend-design",
-            "html",
-            "css",
-            "website",
-            "webpage",
-            "page",
-            "pages",
-            "landing",
-            "dashboard",
-            "app",
-            "interface",
-            "layout",
-            "component",
-            "components",
-            "design",
-        }
-        slides_query_tokens = {"slide", "slides", "deck", "presentation", "presentations"}
-        api_query_tokens = {"api", "apis", "endpoint", "endpoints", "interface", "contract"}
+        lookup_tokens = self._lookup_tokens(skill)
+        desc_tokens = self._tokenize(skill.description)
 
-        name_overlap = skill_name_tokens & query_tokens
-        desc_overlap = skill_desc_tokens & query_tokens
+        name_overlap = self._tokenize(skill.name) & query_tokens
+        lookup_overlap = lookup_tokens & query_tokens
+        desc_overlap = desc_tokens & query_tokens
+        if lookup_overlap:
+            score += len(lookup_overlap) * 10
+            reasons.append("skill metadata overlap")
         if name_overlap:
-            score += len(name_overlap) * 6
-            reasons.append("skill name overlap")
+            score += len(name_overlap) * 4
         if desc_overlap:
-            score += min(len(desc_overlap), 4)
+            score += min(len(desc_overlap) * 3, 18)
+            reasons.append("skill description overlap")
 
-        if skill_name_tokens and skill_name_tokens.issubset(query_tokens):
+        name_tokens = self._tokenize(skill.name)
+        if name_tokens and name_tokens.issubset(query_tokens):
             score += 18
             reasons.append("all skill name terms present")
-
-        if skill.name == "frontend-design" and ui_query_tokens & query_tokens:
-            score += 28
-            reasons.append("frontend UI/design request")
-
-        if skill.name == "frontend-slides" and slides_query_tokens & query_tokens:
-            score += 28
-            reasons.append("frontend slide/deck request")
-
-        if "api" in skill_name_tokens and api_query_tokens & query_tokens:
-            score += 24
-            reasons.append("API/interface request")
 
         if not reasons:
             reasons.append("keyword match")
@@ -326,17 +433,38 @@ class SkillManager:
 
     def _tokenize(self, text: str) -> set[str]:
         return {
-            token
+            normalized
             for token in re.findall(r"[a-z0-9]+", text.lower())
-            if token
+            if (normalized := self._normalize_token(token)) not in _MATCH_STOPWORDS
+            and normalized
         }
 
-    def _normalize_phrase(self, text: str) -> str:
-        return " ".join(
-            token
+    def _phrase_tokens(self, text: str) -> list[str]:
+        return [
+            self._normalize_token(token)
             for token in re.findall(r"[a-z0-9]+", text.lower())
             if token
-        )
+        ]
+
+    def _normalize_phrase(self, text: str) -> str:
+        return " ".join(self._phrase_tokens(text))
+
+    def _normalize_token(self, token: str) -> str:
+        token = token.lower()
+        if len(token) > 5 and token.endswith("ing"):
+            return token[:-3]
+        if len(token) > 4 and token.endswith("ies"):
+            return token[:-3] + "y"
+        if len(token) > 3 and token.endswith("s"):
+            return token[:-1]
+        return token
+
+    def _lookup_tokens(self, skill: SkillMetadata) -> set[str]:
+        tokens = set(self._tokenize(skill.name))
+        tokens.update(self._tokenize(skill.path.parent.name))
+        for alias in skill.aliases or []:
+            tokens.update(self._tokenize(alias))
+        return tokens
 
     def _strip_frontmatter(self, text: str) -> str:
         frontmatter, body = self._split_frontmatter(text)

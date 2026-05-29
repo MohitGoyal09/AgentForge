@@ -252,13 +252,13 @@ def _get_skills_section(
         lines.append("No skills were discovered.")
         return "\n".join(lines)
 
-    lines.append("Available skills:")
-    for skill in skills:
-        marker = "*" if skill.name in active else "-"
-        tools = ""
-        if skill.allowed_tools:
-            tools = f" | tools: {', '.join(skill.allowed_tools)}"
-        lines.append(f"{marker} {skill.name}: {skill.description}{tools}")
+    lines.append(
+        f"{len(skills)} skill(s) are available in the local skill index. "
+        "The harness selects relevant skills before the model call."
+    )
+    lines.append(
+        "Do not assume an inactive skill is loaded. Use only skill bodies shown below."
+    )
 
     if active:
         lines.append("")
@@ -271,9 +271,14 @@ def _get_skills_section(
             lines.append(f"## {name}")
             lines.append("")
             lines.append(body.strip())
+    else:
+        lines.append("")
+        lines.append("Active skills: none")
 
     lines.append("")
-    lines.append("Load full skill text only when a specific skill is selected.")
+    lines.append(
+        "Progressive disclosure rule: inactive skill metadata and references remain outside model context."
+    )
     return "\n".join(lines)
 
 

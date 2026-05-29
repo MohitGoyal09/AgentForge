@@ -544,17 +544,20 @@ skills/
 Skill loading should follow this rule:
 
 ```text
-Always show what skills exist.
-Only load full skill text when selected.
-Only load reference files when the skill asks for them.
+Keep the full skill index local to the harness.
+Show the user skill discovery and activation in the TUI.
+Inject only selected skill bodies into the model prompt.
+Load reference files only when the selected skill asks for them.
 ```
 
 Automatic skill matching is intentionally conservative:
 
 - exact skill names win first, so `frontend design skill` loads only `frontend-design`
+- aliases, command names, display names, and folder names are matched as skill metadata
 - inferred matches load at most one skill per user message
 - low-confidence overlap is ignored instead of bloating the prompt
 - the TUI shows the matched skill, reason, source file, and loaded line count
+- inactive skill names and descriptions stay out of the system prompt
 
 ## Persistence, Checkpoints, and Replay
 
