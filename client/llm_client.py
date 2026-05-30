@@ -50,13 +50,14 @@ class LLMClient:
         self, 
         messages: list[dict[str, Any]], 
         tools: list[dict[str, Any ]] | None = None,
-        stream: bool = True
-        
+        stream: bool = True,
+        model: str | None = None,
         ) -> AsyncGenerator[StreamEvent, None]:
         client = self.get_client()
 
+        model_name = model or self.config.model_name
         kwargs = {
-                    "model": self.config.model_name,
+                    "model": model_name,
                     "messages": messages,
                     "stream": stream,
         }

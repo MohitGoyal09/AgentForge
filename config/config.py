@@ -16,6 +16,7 @@ class ModelConfig(BaseModel):
     name : str = "minimax/minimax-m2.5:free"
     temperature: float = Field(default=1, ge=0.0, le=2.0)
     context_window: int = 256_000
+    fallbacks: list[str] = Field(default_factory=list, description="Fallback models tried in order when primary is circuit-broken or fails")
     
 
 class SubagentConfig(BaseModel):

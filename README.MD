@@ -163,7 +163,8 @@ agentforge/
 |-- prompts/
 |   `-- system.py              # System prompt sections and compaction prompts
 |-- safety/
-|   `-- approval.py            # Approval policy and command safety checks
+|   |-- approval.py            # Approval policy and command safety checks
+|   `-- circuit_breaker.py     # Per-model circuit breaker + fallback chain
 |-- tools/
 |   |-- base.py                # Tool, ToolResult, ToolConfirmation abstractions
 |   |-- registry.py            # Tool registration and invocation
@@ -675,6 +676,11 @@ skill_roots = [".skills"]
 name = "deepseek/deepseek-v4-flash:free"
 temperature = 1.0
 context_window = 256000
+fallbacks = ["openai/gpt-4o-mini", "anthropic/claude-sonnet-4"]
+
+# Self-healing: after 3 consecutive errors on a model,
+# its circuit breaker opens for 60s, then the agent
+# tries the next fallback in the chain automatically.
 
 [[subagents]]
 name = "code-explainer"
@@ -806,6 +812,7 @@ Implemented:
 - Compaction scaffolding
 - Persistent user memory
 - Loop detector integration
+- Circuit breaker + model fallback chain
 - Session snapshots
 - Event JSONL logs
 - Checkpoints

@@ -9,6 +9,7 @@ from agent.session import Session
 from client.response import StreamEventType, TokenUsage, ToolCall, ToolResultMessage
 from config.config import Config
 from prompts.system import create_loop_breaker_prompt
+from safety.circuit_breaker import CircuitBreakerRegistry
 from tools.base import ToolConfirmation
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,12 @@ class Agent:
         max_turns = self.config.max_turns
         max_llm_retries = 3
 
+        model_chain = [
+            self.config.model_name,
+            *(self.config.model.fallbacks or []),
+        ]
+        circuit_breaker = CircuitBreakerRegistry()
+
         try:
             for turn_num in range(max_turns):
                 self.session.increment_turn()
@@ -55,54 +62,87 @@ class Agent:
 
                 tool_schemas = self.session.tool_registry.get_schemas(mode=self.session.mode)
 
-                # LLM call with retry on stream errors
+                # LLM call with circuit breaker + fallback chain
                 response_text = ""
                 tool_calls: list[ToolCall] = []
                 usage: TokenUsage | None = None
                 llm_success = False
+                selected_model = model_chain[0]
 
-                for attempt in range(max_llm_retries + 1):
-                    response_text = ""
-                    tool_calls = []
-                    usage = None
-                    saw_error = False
+                for model_idx, model_name in enumerate(model_chain):
+                    if circuit_breaker.is_open(model_name):
+                        yield AgentEvent.text_delta(
+                            f"\n[Skipping {model_name} (circuit open)]"
+                        )
+                        continue
 
-                    async for event in self.session.client.chat_completion(
-                        self.session.context_manager.get_messages(),
-                        tools=tool_schemas if tool_schemas else None,
-                    ):
-                        if event.type == StreamEventType.TEXT_DELTA:
-                            if event.text_delta:
-                                content = event.text_delta.content
-                                response_text += content
-                                yield AgentEvent.text_delta(content)
-                        elif event.type == StreamEventType.TOOL_CALL_COMPLETE:
-                            if event.tool_call:
-                                tool_calls.append(event.tool_call)
-                        elif event.type == StreamEventType.ERROR:
-                            if attempt < max_llm_retries:
-                                wait = 2 ** attempt + random.uniform(0, 1)
-                                err_msg = event.error or "unknown error"
-                                yield AgentEvent.text_delta(
-                                    f"\n[LLM error: {err_msg}, retrying in {wait:.1f}s...]"
-                                )
-                                await asyncio.sleep(wait)
-                                saw_error = True
-                                break
-                            else:
-                                yield AgentEvent.agents_error(
-                                    event.error or "LLM call failed after all retries."
-                                )
-                                return
-                        elif event.type == StreamEventType.MESSAGE_COMPLETE:
-                            usage = event.token_usage
+                    for attempt in range(max_llm_retries + 1):
+                        response_text = ""
+                        tool_calls = []
+                        usage = None
+                        saw_error = False
 
-                    if not saw_error:
+                        async for event in self.session.client.chat_completion(
+                            self.session.context_manager.get_messages(),
+                            tools=tool_schemas if tool_schemas else None,
+                            model=model_name,
+                        ):
+                            if event.type == StreamEventType.TEXT_DELTA:
+                                if event.text_delta:
+                                    content = event.text_delta.content
+                                    response_text += content
+                                    yield AgentEvent.text_delta(content)
+                            elif event.type == StreamEventType.TOOL_CALL_COMPLETE:
+                                if event.tool_call:
+                                    tool_calls.append(event.tool_call)
+                            elif event.type == StreamEventType.ERROR:
+                                circuit_breaker.record_failure(model_name)
+                                if attempt < max_llm_retries and circuit_breaker.can_try(model_name):
+                                    wait = 2 ** attempt + random.uniform(0, 1)
+                                    err_msg = event.error or "unknown error"
+                                    yield AgentEvent.text_delta(
+                                        f"\n[{model_name} error: {err_msg}, retrying in {wait:.1f}s...]"
+                                    )
+                                    await asyncio.sleep(wait)
+                                    saw_error = True
+                                    break
+                                elif attempt < max_llm_retries:
+                                    yield AgentEvent.text_delta(
+                                        f"\n[{model_name} circuit open after {circuit_breaker.failure_threshold} failures, trying fallback...]"
+                                    )
+                                    saw_error = True
+                                    break
+                                else:
+                                    yield AgentEvent.text_delta(
+                                        f"\n[{model_name} failed after {max_llm_retries + 1} attempts, trying fallback...]"
+                                    )
+                                    saw_error = True
+                                    break
+                            elif event.type == StreamEventType.MESSAGE_COMPLETE:
+                                usage = event.token_usage
+
+                        if saw_error:
+                            continue
+
+                        circuit_breaker.record_success(model_name)
                         llm_success = True
+                        selected_model = model_name
+                        break
+
+                    if llm_success:
                         break
 
                 if not llm_success:
+                    yield AgentEvent.agents_error(
+                        f"All models exhausted. Tried: {', '.join(model_chain)}. "
+                        "Check API keys and network connectivity."
+                    )
                     return
+
+                if selected_model != model_chain[0]:
+                    yield AgentEvent.text_delta(
+                        f"\n[Failed over to {selected_model}]\n"
+                    )
 
                 self.session.context_manager.add_assistant_message(
                     response_text or None,
