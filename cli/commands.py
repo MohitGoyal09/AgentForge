@@ -4,6 +4,8 @@ from typing import Any
 from agent.events import AgentEventType
 from agent.modes import AgentMode
 from config.config import ApprovalPolicy, Config
+from tools.base import ToolInvocation
+from tools.builtin.todo import TodosTool
 from ui.tui import TUI, get_console
 
 console = get_console()
@@ -27,7 +29,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /plan /build /skills /tools /mcp /stats /exit",
+                "commands: /help /plan /build /skills /tools /mcp /stats /todos /exit",
             ],
             mode=AgentMode.BUILD.value,
         )
@@ -37,12 +39,19 @@ class CLI:
 
             while True:
                 try:
-                    mode_tag = ""
-                    if self.agent and self.agent.session:
-                        m = self.agent.session.mode.value
-                        color = "tool.read" if m == "plan" else "tool.shell"
-                        mode_tag = f"[{color}]{m}[/{color}]"
-                    user_input = console.input(f"\n{mode_tag}[user]>[/user] ").strip()
+                    mode = self.agent.session.mode.value if self.agent and self.agent.session else "build"
+                    turn = self.agent.session._turn_count if self.agent and self.agent.session else 0
+                    tool = self.agent.session.tool_registry.get("todos") if self.agent and self.agent.session else None
+                    todo_count = len(tool._todos) if isinstance(tool, TodosTool) else 0
+
+                    mode_color = "tool.read" if mode == "plan" else "tool.shell"
+                    todo_style = "success" if todo_count == 0 else "warning"
+                    prompt = (
+                        f"\n[{mode_color}]◆ {mode.upper()}  #{turn}[/{mode_color}]"
+                        f" [{todo_style}]● {todo_count}[/{todo_style}]"
+                        f" [user]❯[/user] "
+                    )
+                    user_input = console.input(prompt).strip()
                     if not user_input:
                         continue
                     if user_input.startswith("/"):
@@ -225,12 +234,26 @@ class CLI:
                 self.tui.show_mode(AgentMode.BUILD.value)
             return True
 
+        if name == "/todos":
+            if self.agent and self.agent.session:
+                tool = self.agent.session.tool_registry.get("todos")
+                if isinstance(tool, TodosTool):
+                    items = [(tid, c) for tid, c in tool._todos.items()]
+                    self.tui.show_todos_list(items)
+                else:
+                    self.tui.show_todos_list([])
+            return True
+
         if name == "/stats":
             if self.agent:
                 usage = self.agent.session.context_manager.get_total_usage()
+                tool = self.agent.session.tool_registry.get("todos")
+                todo_count = len(tool._todos) if isinstance(tool, TodosTool) else 0
                 self.tui.show_stats(
                     {
                         "turns": self.agent.session._turn_count,
+                        "mode": self.agent.session.mode.value,
+                        "todos": todo_count,
                         "prompt_tokens": usage.prompt_tokens,
                         "completion_tokens": usage.completion_tokens,
                         "total_tokens": usage.total_tokens,

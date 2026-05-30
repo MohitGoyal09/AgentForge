@@ -24,5 +24,12 @@ dependencies = [
 [project.scripts]
 agentforge = "cli.run:cli"
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
 [tool.setuptools.packages.find]
 include = ["agent*", "cli*", "client*", "config*", "context*", "hooks*", "prompts*", "safety*", "tools*", "ui*", "utils*", "skills*"]

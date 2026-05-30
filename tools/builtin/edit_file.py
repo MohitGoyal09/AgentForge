@@ -117,7 +117,10 @@ class EditTool(Tool):
                 "Try re-reading the file using read_file tool and then editing."
             )
 
-        return ToolResult.error_result(error_msg)
+        return ToolResult.error_result(
+            error_msg,
+            recovery_hint="Re-read the file with read_file, verify the exact content, then retry with a matching old_string.",
+        )
 
     async def execute(self, invocation: ToolInvocation) -> ToolResult:
         params = EditParams(**invocation.params)

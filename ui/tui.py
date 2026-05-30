@@ -458,6 +458,38 @@ class TUI:
             )
         )
 
+    def show_todos_list(self, todos: list[tuple[str, str]]) -> None:
+        if not todos:
+            self.console.print(
+                Panel(
+                    Text("No active todos", style="muted"),
+                    title=Text("Todos", style="highlight"),
+                    title_align="left",
+                    border_style="border",
+                    box=box.ROUNDED,
+                    padding=(0, 2),
+                )
+            )
+            return
+
+        table = Table.grid(padding=(0, 2))
+        table.add_column(style="muted", no_wrap=True)
+        table.add_column(style="code", overflow="fold")
+
+        for todo_id, content in todos:
+            table.add_row(f"[{todo_id}]", content)
+
+        self.console.print(
+            Panel(
+                table,
+                title=Text(f"Todos ({len(todos)})", style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
     def show_stats(self, stats: dict[str, Any]) -> None:
         table = Table.grid(padding=(0, 2))
         table.add_column(style="muted", no_wrap=True)
@@ -932,6 +964,7 @@ class TUI:
 - `/model <name>` - Change the model
 - `/approval <mode>` - Change approval mode
 - `/stats` - Show session statistics
+- `/todos` - Show active todos
 - `/tools` - List available tools
 - `/skills` - List available skills
 - `/skill <name>` - Activate a skill
