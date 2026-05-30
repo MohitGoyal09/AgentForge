@@ -80,6 +80,7 @@ class GrepTool(Tool):
             return ToolResult.success_result(
                 f"No matches found for pattern '{params.pattern}'",
                 summary=f"No matches for '{params.pattern}' in {search_path}",
+                next_actions=["Try a broader pattern, a case-insensitive search, or remove path filters."],
                 metadata={
                     "path": str(search_path),
                     "matches": 0,

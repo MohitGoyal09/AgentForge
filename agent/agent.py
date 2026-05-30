@@ -10,7 +10,7 @@ from client.response import StreamEventType, TokenUsage, ToolCall, ToolResultMes
 from config.config import Config
 from prompts.system import create_loop_breaker_prompt
 from safety.circuit_breaker import CircuitBreakerRegistry
-from tools.base import ToolConfirmation
+from tools.base import ToolConfirmation, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +51,20 @@ class Agent:
             for turn_num in range(max_turns):
                 self.session.increment_turn()
 
-                # check for context overflow
-                if self.session.context_manager.needs_compression():
-                    summary, usage = await self.session.context_manager.compress_old_messages(
-                        self.session.chat_compactor
-                    )
-                    if summary and usage:
-                        self.session.context_manager.set_latest_usage(usage)
-                        self.session.context_manager.add_usage(usage)
+                # check context budget and auto-compress if needed
+                budget = self.session.context_manager.get_context_budget()
+                if budget["warning"]:
+                    if budget["total_tokens"] > 0:
+                        yield AgentEvent.text_delta(
+                            f"\n[Context: {budget['usage_pct']}% ({budget['total_tokens']}/{budget['context_window']} tokens)]"
+                        )
+                    if budget["critical"] or budget["usage_pct"] >= 80:
+                        summary, usage = await self.session.context_manager.compress_old_messages(
+                            self.session.chat_compactor
+                        )
+                        if summary and usage:
+                            self.session.context_manager.set_latest_usage(usage)
+                            self.session.context_manager.add_usage(usage)
 
                 tool_schemas = self.session.tool_registry.get_schemas(mode=self.session.mode)
 
@@ -189,13 +195,24 @@ class Agent:
                         args=tool_call.arguments,
                     )
 
-                    result = await self.session.tool_registry.invoke(
-                        tool_call.name,
-                        tool_call.arguments,
-                        self.config.cwd,
-                        self.session.hook_system,
-                        self.session.approval_manager,
-                    )
+                    try:
+                        result = await self.session.tool_registry.invoke(
+                            tool_call.name,
+                            tool_call.arguments,
+                            self.config.cwd,
+                            self.session.hook_system,
+                            self.session.approval_manager,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Tool '%s' crashed: %s",
+                            tool_call.name,
+                            e,
+                        )
+                        yield AgentEvent.text_delta(
+                            f"\n[Tool '{tool_call.name}' crashed: {e}]"
+                        )
+                        result = ToolResult.error_result(f"Tool crashed: {e}")
 
                     yield AgentEvent.tool_call_complete(
                         tool_call.call_id,

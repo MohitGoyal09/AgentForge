@@ -119,6 +119,7 @@ class EditTool(Tool):
 
         return ToolResult.error_result(
             error_msg,
+            summary="old_string not found in file",
             recovery_hint="Re-read the file with read_file, verify the exact content, then retry with a matching old_string.",
         )
 

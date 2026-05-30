@@ -1,5 +1,6 @@
 from agent.agent import Agent
 import asyncio
+import difflib
 from typing import Any
 from agent.events import AgentEventType
 from agent.modes import AgentMode
@@ -29,7 +30,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /plan /build /skills /tools /mcp /stats /todos /exit",
+                "commands: /help /plan /build /name /skills /tools /mcp /stats /todos /exit",
             ],
             mode=AgentMode.BUILD.value,
         )
@@ -171,6 +172,16 @@ class CLI:
             if self.agent:
                 self.tui.show_mcp_servers(self.agent.session.mcp_manager.get_all_servers())
             return True
+        if name == "/name":
+            if not self.agent or not self.agent.session:
+                return True
+            if not argument:
+                label = self.agent.session.name or self.agent.session.session_id
+                self.tui.show_notice(f"Session name: {label}", "Session")
+            else:
+                self.agent.session.name = argument
+                self.tui.show_notice(f"Session renamed to: {argument}", "Session")
+            return True
         if name == "/save":
             if self.agent:
                 self.agent.session.save_session()
@@ -262,7 +273,18 @@ class CLI:
                 )
             return True
 
-        self.tui.show_error(f"Unknown command: {name}\nRun /help to see available commands.")
+        known = [
+            "/help", "/exit", "/quit", "/clear", "/config", "/model",
+            "/approval", "/stats", "/todos", "/tools", "/skills", "/skill",
+            "/unskill", "/mcp", "/name", "/save", "/sessions", "/resume",
+            "/checkpoint", "/checkpoints", "/restore", "/plan", "/build",
+        ]
+        matches = difflib.get_close_matches(name, known, n=3, cutoff=0.4)
+        msg = f"Unknown command: {name}"
+        if matches:
+            msg += f"\nDid you mean: {', '.join(matches)}?"
+        msg += "\nRun /help to see available commands."
+        self.tui.show_error(msg)
         return True
 
     def _redact_config(self, value: Any) -> Any:

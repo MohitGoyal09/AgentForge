@@ -130,10 +130,21 @@ class ContextManager:
             messages.append(item.to_dict())
         return messages
     
+    def get_context_budget(self) -> dict:
+        window = self.config.model.context_window
+        total = self._estimate_current_tokens()
+        pct = (total / window * 100) if window > 0 else 0
+        return {
+            "total_tokens": total,
+            "context_window": window,
+            "usage_pct": round(pct, 1),
+            "remaining": window - total,
+            "warning": pct >= 70,
+            "critical": total > window,
+        }
+
     def needs_compression(self) -> bool:
-        context_limit = self.config.model.context_window
-        current_tokens = self._estimate_current_tokens()
-        return current_tokens > context_limit
+        return self.get_context_budget()["critical"]
 
     def _estimate_current_tokens(self) -> int:
         total = 0

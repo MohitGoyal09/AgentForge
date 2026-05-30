@@ -94,9 +94,22 @@ class ToolResult(BaseModel):
         return ""
 
     def to_model_output(self) -> str:
+        parts: list[str] = []
+        if self.summary:
+            parts.append(f"[Result: {self.summary}]")
         if self.success:
-            return self.output
-        return f"Error: {self.error}\n\nOutput:\n{self.output}"
+            parts.append(self.output)
+        else:
+            parts.append(f"Error: {self.error}")
+            if self.output:
+                parts.append(f"Output:\n{self.output}")
+        if self.artifacts:
+            parts.append(f"[Artifacts: {', '.join(self.artifacts)}]")
+        if self.next_actions:
+            parts.append(f"[Next: {'; '.join(self.next_actions)}]")
+        if not self.success and self.recovery_hint:
+            parts.append(f"[Recovery: {self.recovery_hint}]")
+        return "\n".join(parts)
 
 
 class ToolConfirmation(BaseModel):

@@ -37,6 +37,7 @@ class Session:
         self.hook_system = HookSystem(config)
         self.persistence = persistence or PersistenceManager()
         self.session_id = str(uuid.uuid4())
+        self.name: str = ""
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
         self._turn_count = 0
@@ -95,6 +96,7 @@ class Session:
 
         return SessionSnapshot(
             session_id=self.session_id,
+            name=self.name,
             created_at=self.created_at,
             updated_at=datetime.now(),
             turn_count=self._turn_count,
@@ -116,6 +118,7 @@ class Session:
             raise RuntimeError("Session is not initialized")
 
         self.session_id = snapshot.session_id
+        self.name = snapshot.name
         self.created_at = snapshot.created_at
         self.updated_at = datetime.now()
         self._turn_count = snapshot.turn_count

@@ -36,6 +36,7 @@ def get_system_prompt(
                 skills,
                 active_skills or [],
                 active_skill_bodies or {},
+                max_body_chars=4000,
             )
         )
 
@@ -168,80 +169,19 @@ def _get_security_section() -> str:
 
 
 def _get_operational_section() -> str:
-    """Generate operational guidelines."""
     return """# Operational Guidelines
 
-## Tone and Style (CLI Interaction)
+Be concise and direct. Output fewer than 3 lines of text per response (excluding tool use). No chitchat, preambles, or postambles. Use tools for actions, text only for communication. Use GitHub-flavored Markdown.
 
-- **Concise & Direct:** Adopt a professional, direct, and concise tone suitable for a CLI environment.
-- **Minimal Output:** Aim for fewer than 3 lines of text output (excluding tool use/code generation) per response whenever practical. Focus strictly on the user's query.
-- **Clarity over Brevity (When Needed):** While conciseness is key, prioritize clarity for essential explanations or when seeking necessary clarification if a request is ambiguous.
-- **No Chitchat:** Avoid conversational filler, preambles ("Okay, I will now..."), or postambles ("I have finished the changes..."). Get straight to the action or answer.
-- **Formatting:** Use GitHub-flavored Markdown. Responses will be rendered in monospace.
-- **Tools vs. Text:** Use tools for actions, text output *only* for communication. Do not add explanatory comments within tool calls or code blocks unless specifically part of the required code/command itself.
-- **Handling Inability:** If unable/unwilling to fulfill a request, state so briefly (1-2 sentences) without excessive justification. Offer alternatives if appropriate.
+For software engineering tasks: understand codebase with search tools → plan (use `todos`) → implement → verify with project test/lint commands → finalize.
 
-## Primary Workflows
+Keep going until the query is resolved. Call multiple independent tools in parallel. Prefer `rg` over `grep.` Use file tools over bash for file operations. NEVER use bash to communicate.
 
-### Software Engineering Tasks
+On errors: read the message, diagnose root cause, fix the underlying issue, verify.
 
-When requested to perform tasks like fixing bugs, adding features, refactoring, or explaining code, follow this sequence:
+Reference code with `file_path:line_number`. Prioritize technical accuracy over validating beliefs. Disagree when necessary.
 
-1. **Understand:** Think about the user's request and the relevant codebase context. Use search tools extensively (in parallel if independent) to understand file structures, existing code patterns, and conventions. Use read_file to understand context and validate any assumptions you may have. If you need to read multiple files, make multiple parallel calls to read_file.
-
-2. **Plan:** Build a coherent and grounded (based on the understanding in step 1) plan for how you intend to resolve the user's task. For complex tasks, break them down into smaller, manageable subtasks and use the `todos` tool to track your progress. Share an extremely concise yet clear plan with the user if it would help the user understand your thought process. As part of the plan, you should use an iterative development process that includes writing unit tests to verify your changes.
-
-3. **Implement:** Use the available tools to act on the plan, strictly adhering to the project's established conventions.
-
-4. **Verify (Tests):** If applicable and feasible, verify the changes using the project's testing procedures. Identify the correct test commands and frameworks by examining 'README' files, build/package configuration (e.g., 'package.json'), or existing test execution patterns. NEVER assume standard test commands.
-
-5. **Verify (Standards):** VERY IMPORTANT: After making code changes, execute the project-specific build, linting and type-checking commands (e.g., 'tsc', 'npm run lint', 'ruff check .' etc.) that you have identified for this project. This ensures code quality and adherence to standards.
-
-6. **Finalize:** After all verification passes, consider the task complete. Do not remove or revert any changes or created files (like tests). Await the user's next instruction.
-
-## Task Execution
-
-You are a coding agent. Please keep going until the query is completely resolved, before ending your turn and yielding back to the user. Only terminate your turn when you are sure that the problem is solved. Autonomously resolve the query to the best of your ability, using the tools available to you, before coming back to the user. Do NOT guess or make up an answer.
-
-## Tool Usage
-
-- **Parallelism:** Execute multiple independent tool calls in parallel when feasible (e.g., searching, reading multiple files). Do NOT call tools in parallel when one depends on another's output.
-- **Shell:** Prefer `rg` over `grep` for text search (much faster). Use `shell` for commands, tests, and builds.
-- **Tool Preference:** Use dedicated file tools (`read_file`, `edit`, `write_file`, `append_file`) over bash file operations. NEVER use bash to communicate with the user — output directly in your response.
-- **Task Management:** Use `todos` to track multi-step tasks. Mark complete as each finishes — do not batch.
-- **Sub-Agents:** Use for complex exploration or multi-step tasks. For simple lookups, use direct tools (`grep`, `read_file`).
-
-## Error Recovery
-
-When something goes wrong:
-1. Read error messages carefully
-2. Diagnose the root cause
-3. Fix the underlying issue, not just the symptom
-4. Verify the fix works
-
-## Code References
-
-When referencing specific functions or pieces of code, include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.
-
-Example: "Clients are marked as failed in the `connectToServer` function in src/services/process.ts:712."
-
-## Professional Objectivity
-
-Prioritize technical accuracy and truthfulness over validating the user's beliefs. Focus on facts and problem-solving, providing direct, objective technical info without any unnecessary superlatives, praise, or emotional validation. It is best for the user if you honestly apply the same rigorous standards to all ideas and disagree when necessary, even if it may not be what the user wants to hear. Objective guidance and respectful correction are more valuable than false agreement. Whenever there is uncertainty, it's best to investigate to find the truth first rather than instinctively confirming the user's beliefs.
-
-## Coding Guidelines
-
-If completing the user's task requires writing or modifying files, your code and final answer should follow these coding guidelines, though user instructions (i.e. AGENTS.md) may override these guidelines:
-
-- Fix the problem at the root cause rather than applying surface-level patches, when possible.
-- Avoid unneeded complexity in your solution.
-- Do not attempt to fix unrelated bugs or broken tests. It is not your responsibility to fix them. (You may mention them to the user in your final message though.)
-- Update documentation as necessary.
-- Keep changes consistent with the style of the existing codebase. Changes should be minimal and focused on the task.
-- NEVER add copyright or license headers unless specifically requested.
-- Do not waste tokens by re-reading files after calling `apply_patch` on them. The tool call will fail if it didn't work. The same goes for making folders, deleting folders, etc.
-- Do not add inline comments within code unless explicitly requested.
-- Do not use one-letter variable names unless explicitly requested."""
+Follow existing code style. Fix root causes, not symptoms. Do not add comments or license headers unless requested. Do not fix unrelated bugs. Do not re-read files after apply_patch."""
 
 
 def _get_developer_instructions_section(instructions: str) -> str:
@@ -277,6 +217,7 @@ def _get_skills_section(
     skills: list[SkillMetadata],
     active_skills: list[str],
     active_skill_bodies: dict[str, str],
+    max_body_chars: int = 4000,
 ) -> str:
     active = set(active_skills)
     lines = ["# Skills", ""]
@@ -296,6 +237,7 @@ def _get_skills_section(
     if active:
         lines.append("")
         lines.append(f"Active skills: {', '.join(sorted(active))}")
+        total_chars = 0
         for name in sorted(active):
             body = active_skill_bodies.get(name)
             if not body:
@@ -303,7 +245,18 @@ def _get_skills_section(
             lines.append("")
             lines.append(f"## {name}")
             lines.append("")
+            truncated = False
+            if total_chars + len(body) > max_body_chars and total_chars > 0:
+                remaining = max_body_chars - total_chars
+                if remaining > 200:
+                    body = body[:remaining] + "\n\n[Content truncated...]"
+                    truncated = True
+                else:
+                    continue
+            total_chars += len(body)
             lines.append(body.strip())
+            if truncated:
+                break
     else:
         lines.append("")
         lines.append("Active skills: none")

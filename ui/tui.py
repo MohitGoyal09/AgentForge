@@ -516,19 +516,21 @@ class TUI:
             header_style="highlight",
             expand=True,
         )
-        table.add_column("Session", style="code", overflow="fold")
+        table.add_column("Name", style="highlight", no_wrap=True)
+        table.add_column("Session ID", style="code", overflow="fold")
         table.add_column("Updated", style="muted", no_wrap=True)
         table.add_column("Turns", style="code", justify="right")
         table.add_column("Mode", style="muted", no_wrap=True)
-        table.add_column("CWD", style="code", overflow="fold")
 
         for session in sessions:
+            sid = str(session.get("session_id", ""))
+            name = str(session.get("name", "")) or sid[:8]
             table.add_row(
-                str(session.get("session_id", "")),
+                name,
+                sid,
                 str(session.get("updated_at", "")),
                 str(session.get("turn_count", 0)),
                 str(session.get("mode", "")),
-                str(session.get("cwd", "")),
             )
 
         self.console.print(
@@ -970,6 +972,7 @@ class TUI:
 - `/skill <name>` - Activate a skill
 - `/unskill <name>` - Deactivate a skill
 - `/mcp` - Show MCP server status
+- `/name` - Show or set session name (e.g. `/name my-session`)
 - `/plan` - Switch to plan mode (read-only, for designing a plan)
 - `/build` - Switch to build mode (full tool access, for implementing)
 - `/save` - Save current session

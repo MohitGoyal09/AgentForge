@@ -31,12 +31,14 @@ class SessionSnapshot:
     todos: dict[str, str]
     event_sequence: int = 0
     mode: str = "build"
+    name: str = ""
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "session_id": self.session_id,
+            "name": self.name,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "turn_count": self.turn_count,
@@ -58,6 +60,7 @@ class SessionSnapshot:
         return cls(
             schema_version=data.get("schema_version", 0),
             session_id=data["session_id"],
+            name=data.get("name", ""),
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),
             turn_count=data["turn_count"],
