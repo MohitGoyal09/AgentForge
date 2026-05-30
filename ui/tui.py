@@ -961,6 +961,12 @@ class TUI:
 
 - `/help` - Show this help
 - `/exit` or `/quit` - Exit the agent
+- `/new` - Start a fresh session (clears conversation)
+- `/reload` - Reload config from disk
+- `/version` - Show AgentForge version
+- `/retry` - Resend the last user message
+- `/history [n]` - Show last N messages (default 10)
+- `/report` - Show session summary report
 - `/clear` - Clear conversation history
 - `/config` - Show current configuration
 - `/model <name>` - Change the model

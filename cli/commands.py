@@ -17,6 +17,7 @@ class CLI:
         self.agent: Agent | None = None
         self.tui = TUI(config=config, console=console)
         self.config = config
+        self._last_user_message: str = ""
 
     async def run_single(self, message: str) -> str | None:
         async with Agent(config=self.config) as agent:
@@ -30,7 +31,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /plan /build /name /skills /tools /mcp /stats /todos /exit",
+                "commands: /help /new /reload /version /plan /build /name /skills /tools /mcp /stats /todos /exit",
             ],
             mode=AgentMode.BUILD.value,
         )
@@ -56,10 +57,11 @@ class CLI:
                     if not user_input:
                         continue
                     if user_input.startswith("/"):
-                        should_continue = self._handle_command(user_input)
+                        should_continue = await self._handle_command(user_input)
                         if not should_continue:
                             break
                         continue
+                    self._last_user_message = user_input
                     await self._process_message(user_input)
 
                 except KeyboardInterrupt:
@@ -77,7 +79,7 @@ class CLI:
             return None
         return tool.kind.value
 
-    def _handle_command(self, command: str) -> bool:
+    async def _handle_command(self, command: str) -> bool:
         parts = command.split(maxsplit=1)
         name = parts[0].lower()
         argument = parts[1].strip() if len(parts) > 1 else ""
@@ -234,6 +236,104 @@ class CLI:
             self.agent.session.restore_snapshot(snapshot)
             self.tui.show_notice(f"Restored checkpoint: {argument}")
             return True
+        if name == "/new":
+            if self.agent and self.agent.session:
+                self.agent.session.reset()
+                self.tui.show_notice("Session reset to clean state")
+            return True
+
+        if name == "/reload":
+            if self.agent and self.agent.session:
+                from config.loader import load_config
+                try:
+                    new_config = load_config(self.config.cwd)
+                except Exception as e:
+                    self.tui.show_error(f"Config reload failed: {e}")
+                    return True
+                self.config = new_config
+                self.agent.config = new_config
+                self.agent.session.config = new_config
+                self.agent.session.approval_manager.approval_policy = new_config.approval
+                self.agent.session.approval_manager.cwd = new_config.cwd
+                if self.agent.session.context_manager:
+                    self.agent.session.context_manager.config = new_config
+                    self.agent.session.context_manager.refresh_system_prompt(
+                        tools=self.agent.session.tool_registry.get_tools(mode=self.agent.session.mode),
+                        mode=self.agent.session.mode,
+                        skills=self.agent.session.skills_manager.list_skills(),
+                        active_skills=self.agent.session.active_skills,
+                        active_skill_bodies=self.agent.session.skills_manager.get_active_skill_bodies(self.agent.session.active_skills),
+                    )
+                self.tui.show_notice(
+                    f"Config reloaded: model={new_config.model_name}, approval={new_config.approval.value}"
+                )
+            return True
+
+        if name == "/version":
+            from cli.run import VERSION
+            self.tui.show_notice(f"AgentForge {VERSION}", "Version")
+            return True
+
+        if name == "/retry":
+            if self._last_user_message:
+                self.tui.show_notice(f"Retrying: {self._last_user_message[:120]}", "Retry")
+                await self._process_message(self._last_user_message)
+            else:
+                self.tui.show_error("No previous message to retry")
+            return True
+
+        if name == "/history":
+            if self.agent and self.agent.session and self.agent.session.context_manager:
+                msgs = self.agent.session.context_manager._messages
+                n = 10
+                if argument:
+                    try:
+                        n = int(argument)
+                    except ValueError:
+                        pass
+                recent = msgs[-n:] if len(msgs) > n else msgs
+                lines = [f"=== Last {len(recent)} message(s) ==="]
+                for msg in recent:
+                    preview = msg.content[:200].replace("\n", "\\n") if msg.content else ""
+                    tc = msg.token_count or ""
+                    if msg.role == "tool" and msg.tool_call_id:
+                        lines.append(f"  [{msg.role}] ({msg.tool_call_id[:8]}): {preview}" + (f" [{tc}t]" if tc else ""))
+                    else:
+                        n_calls = len(msg.tool_calls) if msg.tool_calls else 0
+                        calls = f" [{n_calls} tool call(s)]" if n_calls else ""
+                        lines.append(f"  [{msg.role}]{calls}: {preview}" + (f" [{tc}t]" if tc else ""))
+                self.tui.show_notice("\n".join(lines), "History")
+            else:
+                self.tui.show_error("No active session")
+            return True
+
+        if name == "/report":
+            if self.agent and self.agent.session:
+                s = self.agent.session
+                usage = s.context_manager.get_total_usage() if s.context_manager else None
+                lines = [
+                    f"  Session: {s.name or s.session_id[:8]}",
+                    f"  Model: {self.config.model_name}",
+                    f"  Mode: {s.mode.value}",
+                    f"  Turns: {s._turn_count}",
+                    f"  Created: {s.created_at.strftime('%Y-%m-%d %H:%M')}",
+                    f"  Active skills: {', '.join(s.active_skills) or 'none'}",
+                ]
+                if usage:
+                    lines.append(f"  Prompt tokens: {usage.prompt_tokens}")
+                    lines.append(f"  Completion tokens: {usage.completion_tokens}")
+                    lines.append(f"  Total tokens: {usage.total_tokens}")
+                    if usage.cached_tokens:
+                        lines.append(f"  Cached tokens: {usage.cached_tokens}")
+                lines.append(f"  Tools: {len(s.tool_registry.get_tools())} registered")
+                todo_tool = s.tool_registry.get("todos")
+                if todo_tool and hasattr(todo_tool, "_todos"):
+                    lines.append(f"  Active todos: {len(getattr(todo_tool, '_todos'))}")
+                self.tui.show_notice("\n".join(lines), "Session Report")
+            else:
+                self.tui.show_error("No active session")
+            return True
+
         if name == "/plan":
             if self.agent and self.agent.session:
                 self.agent.session.set_mode(AgentMode.PLAN)
@@ -278,6 +378,7 @@ class CLI:
             "/approval", "/stats", "/todos", "/tools", "/skills", "/skill",
             "/unskill", "/mcp", "/name", "/save", "/sessions", "/resume",
             "/checkpoint", "/checkpoints", "/restore", "/plan", "/build",
+            "/new", "/reload", "/version", "/retry", "/history", "/report",
         ]
         matches = difflib.get_close_matches(name, known, n=3, cutoff=0.4)
         msg = f"Unknown command: {name}"

@@ -61,6 +61,22 @@ class Session:
         )
 
 
+    def reset(self) -> None:
+        self.session_id = str(uuid.uuid4())
+        self.name = ""
+        self.created_at = datetime.now()
+        self.updated_at = datetime.now()
+        self._turn_count = 0
+        self._event_sequence = 0
+        self.active_skills = []
+        self.mode = AgentMode.BUILD
+        if self.context_manager:
+            self.context_manager.clear()
+        self.loop_detector.clear()
+        todo_tool = self.tool_registry.get("todos")
+        if todo_tool and hasattr(todo_tool, "_todos"):
+            getattr(todo_tool, "_todos").clear()
+
     def set_mode(self, mode: AgentMode) -> None:
         if self.mode == mode:
             return
