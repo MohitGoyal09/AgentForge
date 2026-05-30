@@ -2,7 +2,7 @@
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
-The project currently supports streaming model responses, typed tool calls, approval gates, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, and a Rich terminal UI. The next major learning milestones are progressive-disclosure skills, deterministic replay, plan/build modes, and read-only swarm orchestration.
+The project currently supports streaming model responses, typed tool calls, approval gates, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, and a Rich terminal UI. The next major learning milestones are cost tracking, secret scanning, a web browser tool, git tools, deterministic replay, and read-only swarm orchestration.
 
 ## Purpose
 
@@ -722,21 +722,35 @@ Interactive commands:
 | --- | --- | --- |
 | `/help` | implemented | Show commands |
 | `/exit`, `/quit` | implemented | Exit interactive mode |
+| `/new` | implemented | Start a fresh session |
+| `/reload` | implemented | Reload config from disk in-place |
+| `/version` | implemented | Show AgentForge version |
+| `/retry` | implemented | Resend the last user message |
+| `/history [n]` | implemented | Show last N messages (default 10) |
+| `/report` | implemented | Show session summary report |
 | `/clear` | implemented | Clear conversation history |
-| `/config` | implemented | Show redacted config |
+| `/config` | implemented | Show configuration (Rich Table) |
 | `/model <name>` | implemented | Change model for current session |
 | `/approval <mode>` | implemented | Change approval policy |
-| `/tools` | implemented | Show registered tools |
-| `/mcp` | implemented | Show MCP server status |
 | `/stats` | implemented | Show token/session stats |
+| `/todos` | implemented | Show active todos |
+| `/todos --clear` | implemented | Clear all todos |
+| `/tools` | implemented | Show registered tools |
+| `/skills` | implemented | List available skills |
+| `/skill <name>` | implemented | Activate a skill |
+| `/unskill <name>` | implemented | Deactivate a skill |
+| `/mcp` | implemented | Show MCP server status |
+| `/name` | implemented | Show or set session name |
 | `/save` | implemented | Save current session snapshot |
 | `/checkpoint` | implemented | Create checkpoint from current session |
 | `/restore <checkpoint_id>` | implemented | Restore checkpoint state |
 | `/checkpoints` | implemented | List saved checkpoints |
 | `/sessions` | implemented | List saved sessions |
 | `/resume <session_id>` | implemented | Resume saved session |
-| `/plan` | planned | Switch to plan mode |
-| `/build` | planned | Switch to build mode |
+| `/plan` | implemented | Switch to plan mode (read-only tools) |
+| `/build` | implemented | Switch to build mode (all tools) |
+| `/export` | implemented | Export session as markdown |
+| `/stats` | implemented | Show session statistics |
 | `/swarm` | planned | Run swarm orchestration |
 
 ## Development
@@ -782,17 +796,25 @@ Completed foundation:
 2. Add transcript persistence.
 3. Integrate loop detector.
 4. Add session checkpoints.
+5. Add structured tool observations.
+6. Add plan/build modes.
+7. Add circuit breaker + fallback chain.
+8. Add context budget estimation.
+9. Add skill body token limit.
+10. Add eval harness scaffold (models, assertions, runner, scenarios).
 
 Recommended next implementation order:
 
-1. Add deterministic replay from event logs.
-2. Add structured tool observations.
-3. Add progressive-disclosure skills.
-4. Add plan/build modes.
-5. Add read-only swarm mode.
-6. Add eval harness.
-7. Add workspace rollback for checkpoints.
-8. Add write-capable swarm mode with file ownership.
+1. Add eval harness (LLM judge, CI integration, diff mode).
+2. Add cost tracking (`/cost` command).
+3. Add secret scanning.
+4. Add prompt injection test suite.
+5. Add web browser tool.
+6. Add git tools.
+7. Add deterministic replay from event logs.
+8. Add read-only swarm mode.
+9. Add workspace rollback for checkpoints.
+10. Add write-capable swarm mode with file ownership.
 
 ## Current Status
 
@@ -802,30 +824,38 @@ Implemented:
 - OpenAI-compatible API support
 - Rich TUI
 - Tool registry and Pydantic schemas
-- Built-in file/search/shell/web/memory tools
+- Built-in file/search/shell/web/memory/todos tools
 - Dynamic local tool discovery from `.agentforge/tools`
-- Approval manager
-- Hook system
+- `grep` with context lines parameter
+- Approval manager with 6 modes
+- Hook system (before/after agent, before/after tool, on error)
 - MCP tool adapter
-- Subagents
-- Context manager
-- Compaction scaffolding
+- Subagents with configurable allowed_tools
+- Context manager with compaction and pruning
 - Persistent user memory
-- Loop detector integration
+- Loop detector (repeated action + cycle detection)
 - Circuit breaker + model fallback chain
-- Session snapshots
-- Event JSONL logs
-- Checkpoints
-- Resume and restore commands
+- Session snapshots, event JSONL logs, checkpoints
+- Resume, restore, and checkpoint commands
+- Plan/build modes with tool filtering
+- Config hot-reload (`/reload`)
+- Skill system with progressive disclosure, auto-activation, and body token limit
+- Context budget estimation (70% warning, 80% auto-compress)
+- Per-tool error isolation
+- Observation fields on all tools (summary, next_actions, artifacts, recovery_hint)
+- CLI commands: `new`, `reload`, `version`, `retry`, `history`, `report`, `export`, `todos --clear`, `config` pretty-print
+- Eval harness scaffold (models, assertions, runner, report, scenarios)
 
 In progress or planned:
 
+- Eval harness: LLM judge, CI integration, mock mode
+- Cost tracking (`/cost`)
+- Secret scanning
+- Prompt injection test suite
+- Web browser tool (Playwright)
+- Git tools
 - Deterministic replay
-- Progressive-disclosure skills
-- Plan/build modes
 - Swarm mode
-- Structured tool observation contract
-- Eval harness
 - Workspace rollback for checkpoints
 
 ## Design Principles

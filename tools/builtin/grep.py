@@ -14,6 +14,11 @@ class GrepParams(BaseModel):
         False,
         description="Case-insensitive search (default: false)",
     )
+    context: int = Field(
+        0, ge=0, le=50,
+        description="Number of lines of context to show before and after each match (default: 0). "
+                    "Like grep -C. Useful for understanding code around matches.",
+    )
 
 
 class GrepTool(Tool):
@@ -53,28 +58,53 @@ class GrepTool(Tool):
         matches = 0
         matched_file_paths: list[str] = []
 
+        ctx = params.context
+
         for file_path in files:
             try:
                 content = file_path.read_text(encoding="utf-8")
             except Exception:
                 continue
 
-            lines = content.splitlines()
+            file_lines = content.splitlines()
             file_matches = False
+            matched_line_numbers: set[int] = set()
 
-            for i, line in enumerate(lines, start=1):
+            for i, line in enumerate(file_lines, start=1):
                 if pattern.search(line):
                     matches += 1
+                    matched_line_numbers.add(i)
                     if not file_matches:
                         rel_path = file_path.relative_to(invocation.cwd)
                         output_lines.append(f"=== {rel_path} ===")
                         file_matches = True
 
-                    output_lines.append(f"{i}:{line}")
+            if not file_matches:
+                continue
 
-            if file_matches:
-                output_lines.append("")
-                matched_file_paths.append(str(file_path))
+            if ctx:
+                context_lines: set[int] = set()
+                for ln in matched_line_numbers:
+                    for offset in range(-ctx, ctx + 1):
+                        context_lines.add(ln + offset)
+                context_lines = {ln for ln in context_lines if 1 <= ln <= len(file_lines)}
+                prev_was_gap = False
+                for ln in sorted(context_lines):
+                    if ln not in matched_line_numbers and ln - 1 not in context_lines:
+                        if not prev_was_gap:
+                            output_lines.append("...")
+                            prev_was_gap = True
+                        continue
+                    prev_was_gap = False
+                    prefix = "> " if ln in matched_line_numbers else "  "
+                    output_lines.append(f"{prefix}{ln}:{file_lines[ln - 1]}")
+            else:
+                for i, line in enumerate(file_lines, start=1):
+                    if i in matched_line_numbers:
+                        output_lines.append(f"{i}:{line}")
+
+            output_lines.append("")
+            matched_file_paths.append(str(file_path))
 
         if not output_lines:
             return ToolResult.success_result(

@@ -8,6 +8,7 @@ from config.config import ApprovalPolicy, Config
 from tools.base import ToolInvocation
 from tools.builtin.todo import TodosTool
 from ui.tui import TUI, get_console
+from pathlib import Path
 
 console = get_console()
 
@@ -349,8 +350,13 @@ class CLI:
             if self.agent and self.agent.session:
                 tool = self.agent.session.tool_registry.get("todos")
                 if isinstance(tool, TodosTool):
-                    items = [(tid, c) for tid, c in tool._todos.items()]
-                    self.tui.show_todos_list(items)
+                    if argument == "--clear":
+                        count = len(tool._todos)
+                        tool._todos.clear()
+                        self.tui.show_notice(f"Cleared {count} todo(s)", "Todos")
+                    else:
+                        items = [(tid, c) for tid, c in tool._todos.items()]
+                        self.tui.show_todos_list(items)
                 else:
                     self.tui.show_todos_list([])
             return True
@@ -373,12 +379,53 @@ class CLI:
                 )
             return True
 
+        if name == "/export":
+            if not self.agent or not self.agent.session:
+                return True
+            fmt = argument or "markdown"
+            if fmt not in ("markdown", "md"):
+                self.tui.show_error(f"Unknown export format: {fmt}")
+                return True
+
+            s = self.agent.session
+            snapshot = s.create_snapshot(mode=s.mode.value)
+            lines = [f"# Session: {snapshot.name or snapshot.session_id}"]
+
+            mode_label = getattr(snapshot, "mode", "build")
+            lines.append(f"## Model: {self.config.model_name} | Turns: {snapshot.turn_count}")
+
+            for msg in snapshot.messages or []:
+                role = msg.get("role", "")
+                content = msg.get("content", "") or ""
+                tool_calls = msg.get("tool_calls")
+                if role == "user":
+                    lines.append(f"\n**User:** {content}")
+                elif role == "assistant":
+                    if content:
+                        lines.append(f"\n**Assistant:** {content}")
+                    if tool_calls:
+                        for tc in tool_calls:
+                            fn = tc.get("function", {})
+                            name = fn.get("name", "tool")
+                            args = fn.get("arguments", "{}")
+                            lines.append(f"\n  *→ `{name}(...)`*")
+                elif role == "tool":
+                    tool_id = msg.get("tool_call_id", "")[:8]
+                    preview = content[:500].replace("\n", "\\n") if content else "(empty)"
+                    lines.append(f"\n  *[{tool_id}]* `{preview}`")
+
+            out_path = Path.cwd() / f"session-{snapshot.session_id[:8]}.md"
+            out_path.write_text("\n".join(lines))
+            self.tui.show_export("\n".join(lines), str(out_path))
+            return True
+
         known = [
             "/help", "/exit", "/quit", "/clear", "/config", "/model",
             "/approval", "/stats", "/todos", "/tools", "/skills", "/skill",
             "/unskill", "/mcp", "/name", "/save", "/sessions", "/resume",
             "/checkpoint", "/checkpoints", "/restore", "/plan", "/build",
             "/new", "/reload", "/version", "/retry", "/history", "/report",
+            "/export",
         ]
         matches = difflib.get_close_matches(name, known, n=3, cutoff=0.4)
         msg = f"Unknown command: {name}"

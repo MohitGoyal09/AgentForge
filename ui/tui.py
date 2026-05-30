@@ -356,10 +356,30 @@ class TUI:
         )
 
     def show_config(self, config: dict[str, Any]) -> None:
-        body = json.dumps(config, indent=2)
+        table = Table.grid(padding=(0, 2))
+        table.add_column(style="muted", no_wrap=True)
+        table.add_column(style="code", overflow="fold")
+
+        _SKIP_KEYS = {"mcp_servers", "hooks", "subagents", "skill_roots", "shell_environment"}
+        _SECTION_KEYS = {"model", "approval", "max_turns", "max_tool_output_tokens", "cwd"}
+
+        def flatten(d: dict[str, Any], prefix: str = "") -> list[tuple[str, str]]:
+            rows: list[tuple[str, str]] = []
+            for k, v in d.items():
+                key = f"{prefix}.{k}" if prefix else k
+                if isinstance(v, dict) and k not in _SKIP_KEYS:
+                    rows.extend(flatten(v, key))
+                elif not isinstance(v, (dict, list)):
+                    rows.append((key, str(v)))
+            return rows
+
+        rows = flatten(config)
+        for key, value in rows:
+            table.add_row(key, value)
+
         self.console.print(
             Panel(
-                Syntax(body, "json", theme="monokai", word_wrap=True),
+                table,
                 title=Text("Configuration", style="highlight"),
                 title_align="left",
                 border_style="border",
@@ -955,6 +975,18 @@ class TUI:
 
         return response.lower() in {"y", "yes"}
 
+    def show_export(self, markdown: str, path: str) -> None:
+        self.console.print(
+            Panel(
+                Text(f"Session exported to {path}", style="success"),
+                title=Text("Export", style="highlight"),
+                title_align="left",
+                border_style="success",
+                box=box.ROUNDED,
+                padding=(0, 2),
+            )
+        )
+
     def show_help(self) -> None:
         help_text = """
 ## Commands
@@ -971,8 +1003,10 @@ class TUI:
 - `/config` - Show current configuration
 - `/model <name>` - Change the model
 - `/approval <mode>` - Change approval mode
+- `/export` - Export session as markdown (saves to ./session-{id}.md)
 - `/stats` - Show session statistics
 - `/todos` - Show active todos
+- `/todos --clear` - Clear all todos
 - `/tools` - List available tools
 - `/skills` - List available skills
 - `/skill <name>` - Activate a skill
