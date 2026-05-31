@@ -2,7 +2,7 @@ import random
 from typing import Any, AsyncGenerator
 from openai import APIConnectionError, AsyncOpenAI , RateLimitError , APIError
 
-from agentforge_harness.config.config import Config
+from agentforge_harness.config.config import Config, ModelProvider
 from .response import TextDelta, StreamEventType, StreamEvent, TokenUsage, ToolCall, ToolCallDelta, parse_tool_call_arguments
 import asyncio
 from dotenv import load_dotenv
@@ -12,21 +12,41 @@ load_dotenv()
 class LLMClient:
     def __init__(self , config : Config) -> None:
         self._client : AsyncOpenAI | None = None
+        self._anthropic_client: Any | None = None
         self._max_retries : int = 3
         self.config = config
 
     def get_client(self) -> AsyncOpenAI:
         if self._client is None:
-            self._client = AsyncOpenAI(
-                api_key=self.config.api_key,
-                base_url=self.config.base_url,
-            )
+            kwargs: dict[str, Any] = {"api_key": self.config.api_key}
+            if self.config.base_url:
+                kwargs["base_url"] = self.config.base_url
+            self._client = AsyncOpenAI(**kwargs)
         return self._client
+
+    def get_anthropic_client(self) -> Any:
+        if self._anthropic_client is None:
+            try:
+                from anthropic import AsyncAnthropic
+            except ImportError as e:
+                raise RuntimeError(
+                    "Anthropic provider requires the 'anthropic' package. "
+                    "Install AgentForge with current package dependencies."
+                ) from e
+
+            kwargs: dict[str, Any] = {"api_key": self.config.api_key}
+            if self.config.base_url:
+                kwargs["base_url"] = self.config.base_url
+            self._anthropic_client = AsyncAnthropic(**kwargs)
+        return self._anthropic_client
     
     async def close(self) -> None:
         if self._client:
             await self._client.close()
             self._client = None
+        if self._anthropic_client:
+            await self._anthropic_client.close()
+            self._anthropic_client = None
     
     
     def _build_tools(self , tools: list[dict[str , Any]]):
@@ -54,6 +74,16 @@ class LLMClient:
         model: str | None = None,
         max_retries: int | None = None,
         ) -> AsyncGenerator[StreamEvent, None]:
+        if self.config.provider == ModelProvider.ANTHROPIC:
+            async for event in self._anthropic_chat_completion(
+                messages=messages,
+                tools=tools,
+                model=model,
+                max_retries=max_retries,
+            ):
+                yield event
+            return
+
         client = self.get_client()
 
         model_name = model or self.config.model_name
@@ -100,9 +130,9 @@ class LLMClient:
                 if attempt < retry_count:
                     wait_time = 2 ** attempt + random.uniform(0, 1)
                     await asyncio.sleep(wait_time)
-                   
+
                 else:
-                    yield StreamEvent(type=StreamEventType.ERROR, 
+                    yield StreamEvent(type=StreamEventType.ERROR,
                     error=f"API connection error: {e.message}")
 
                     return
@@ -110,11 +140,157 @@ class LLMClient:
                 if attempt < retry_count:
                     wait_time = 2 ** attempt + random.uniform(0, 1)
                     await asyncio.sleep(wait_time)
-                   
+
                 else:
-                    yield StreamEvent(type=StreamEventType.ERROR, 
+                    yield StreamEvent(type=StreamEventType.ERROR,
                     error=f"API error: {e.message}")
-                    return 
+                    return
+
+    def _build_anthropic_tools(self, tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+        if not tools:
+            return None
+        return [
+            {
+                "name": tool["name"],
+                "description": tool.get("description", ""),
+                "input_schema": tool.get("parameters", {"type": "object", "properties": {}}),
+            }
+            for tool in tools
+        ]
+
+    def _to_anthropic_messages(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> tuple[str | None, list[dict[str, Any]]]:
+        system_parts: list[str] = []
+        converted: list[dict[str, Any]] = []
+
+        for message in messages:
+            role = message.get("role")
+            content = message.get("content", "")
+
+            if role == "system":
+                if content:
+                    system_parts.append(str(content))
+                continue
+
+            if role == "tool":
+                converted.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": message.get("tool_call_id", ""),
+                                "content": str(content),
+                            }
+                        ],
+                    }
+                )
+                continue
+
+            if role == "assistant" and message.get("tool_calls"):
+                blocks: list[dict[str, Any]] = []
+                if content:
+                    blocks.append({"type": "text", "text": str(content)})
+                for tool_call in message.get("tool_calls", []):
+                    function = tool_call.get("function", {})
+                    arguments = function.get("arguments") or "{}"
+                    try:
+                        parsed_args = parse_tool_call_arguments(arguments)
+                    except TypeError:
+                        parsed_args = {}
+                    blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": tool_call.get("id", ""),
+                            "name": function.get("name", ""),
+                            "input": parsed_args,
+                        }
+                    )
+                converted.append({"role": "assistant", "content": blocks})
+                continue
+
+            if role in {"user", "assistant"}:
+                converted.append({"role": role, "content": str(content)})
+
+        return "\n\n".join(system_parts) if system_parts else None, converted
+
+    async def _anthropic_chat_completion(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        max_retries: int | None = None,
+    ) -> AsyncGenerator[StreamEvent, None]:
+        client = self.get_anthropic_client()
+        system, anthropic_messages = self._to_anthropic_messages(messages)
+        kwargs: dict[str, Any] = {
+            "model": model or self.config.model_name,
+            "messages": anthropic_messages,
+            "max_tokens": self.config.model.max_output_tokens,
+            "temperature": self.config.temperature,
+        }
+        if system:
+            kwargs["system"] = system
+        if anthropic_tools := self._build_anthropic_tools(tools):
+            kwargs["tools"] = anthropic_tools
+
+        retry_count = self._max_retries if max_retries is None else max_retries
+
+        for attempt in range(retry_count + 1):
+            try:
+                response = await client.messages.create(**kwargs)
+                input_tokens = getattr(response.usage, "input_tokens", 0) if response.usage else 0
+                output_tokens = getattr(response.usage, "output_tokens", 0) if response.usage else 0
+
+                for block in response.content:
+                    block_type = getattr(block, "type", None)
+                    if block_type == "text":
+                        text = getattr(block, "text", "")
+                        if text:
+                            yield StreamEvent(
+                                type=StreamEventType.TEXT_DELTA,
+                                text_delta=TextDelta(content=text),
+                            )
+                    elif block_type == "tool_use":
+                        tool_call = ToolCall(
+                            call_id=getattr(block, "id", ""),
+                            name=getattr(block, "name", ""),
+                            arguments=getattr(block, "input", {}) or {},
+                        )
+                        yield StreamEvent(
+                            type=StreamEventType.TOOL_CALL_START,
+                            tool_call_delta=ToolCallDelta(
+                                call_id=tool_call.call_id,
+                                name=tool_call.name,
+                            ),
+                        )
+                        yield StreamEvent(
+                            type=StreamEventType.TOOL_CALL_COMPLETE,
+                            tool_call=tool_call,
+                        )
+
+                yield StreamEvent(
+                    type=StreamEventType.MESSAGE_COMPLETE,
+                    finish_reason=getattr(response, "stop_reason", None),
+                    token_usage=TokenUsage(
+                        prompt_tokens=input_tokens,
+                        completion_tokens=output_tokens,
+                        total_tokens=input_tokens + output_tokens,
+                    ),
+                )
+                return
+            except Exception as e:
+                if attempt < retry_count:
+                    wait_time = 2 ** attempt + random.uniform(0, 1)
+                    await asyncio.sleep(wait_time)
+                else:
+                    yield StreamEvent(
+                        type=StreamEventType.ERROR,
+                        error=f"Anthropic API error: {e}",
+                    )
+                    return
 
     async def _stream_response(self,client : AsyncOpenAI , kwargs : dict[str , Any]) -> AsyncGenerator[StreamEvent , None]:
         response = await client.chat.completions.create(**kwargs)

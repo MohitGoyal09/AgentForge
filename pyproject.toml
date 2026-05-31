@@ -27,6 +27,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+    "anthropic",
     "openai",
     "pydantic>=2.0",
     "rich",
@@ -41,9 +42,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/MohitGoyal09/claudecode"
-Repository = "https://github.com/MohitGoyal09/claudecode"
-Documentation = "https://github.com/MohitGoyal09/claudecode#readme"
+Homepage = "https://github.com/MohitGoyal09/Agentforge"
+Repository = "https://github.com/MohitGoyal09/Agentforge"
+Documentation = "https://github.com/MohitGoyal09/Agentforge#readme"
 
 [project.scripts]
 agentforge = "agentforge_harness.cli.run:cli"

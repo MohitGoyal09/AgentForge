@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Multi-provider model configuration for OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible endpoints.
+- Anthropic client adapter with message and tool-call conversion.
+- Setup wizard prompts for provider, model, and base URL.
+- Provider and setup tests covering config resolution, Anthropic conversion, and generated TOML shape.
+
+### Changed
+- Roadmap rewritten as an open-source release roadmap with pre-v1 quick wins and v1 release criteria.
+- Package metadata now points to the Agentforge GitHub repository.
+
 ## 0.1.0 (2026-05-30)
 
 ### Added

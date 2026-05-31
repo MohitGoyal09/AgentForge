@@ -11,11 +11,46 @@ class ShellEnvironmentPolicy(BaseModel):
         default_factory=lambda: ["*KEY*", "*TOKEN*", "*SECRET*"]
     )
     set_vars: dict[str, str] = Field(default_factory=dict)
-    
+
+
+class ModelProvider(str, Enum):
+    OPENROUTER = "openrouter"
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    CUSTOM = "custom"
+
+
+PROVIDER_DEFAULT_BASE_URLS: dict[ModelProvider, str | None] = {
+    ModelProvider.OPENROUTER: "https://openrouter.ai/api/v1",
+    ModelProvider.OPENAI: None,
+    ModelProvider.ANTHROPIC: None,
+    ModelProvider.CUSTOM: None,
+}
+
+
+PROVIDER_API_KEY_ENV: dict[ModelProvider, tuple[str, ...]] = {
+    ModelProvider.OPENROUTER: ("OPENROUTER_API_KEY", "API_KEY"),
+    ModelProvider.OPENAI: ("OPENAI_API_KEY", "API_KEY"),
+    ModelProvider.ANTHROPIC: ("ANTHROPIC_API_KEY", "API_KEY"),
+    ModelProvider.CUSTOM: ("API_KEY",),
+}
+
+
+PROVIDER_BASE_URL_ENV: dict[ModelProvider, tuple[str, ...]] = {
+    ModelProvider.OPENROUTER: ("OPENROUTER_BASE_URL", "BASE_URL"),
+    ModelProvider.OPENAI: ("OPENAI_BASE_URL", "BASE_URL"),
+    ModelProvider.ANTHROPIC: ("ANTHROPIC_BASE_URL", "BASE_URL"),
+    ModelProvider.CUSTOM: ("BASE_URL",),
+}
+
+
 class ModelConfig(BaseModel):
+    provider: ModelProvider = ModelProvider.OPENROUTER
     name : str = "minimax/minimax-m2.5:free"
     temperature: float = Field(default=1, ge=0.0, le=2.0)
     context_window: int = 256_000
+    max_output_tokens: int = Field(default=4096, ge=1)
+    base_url: str | None = None
     fallbacks: list[str] = Field(default_factory=list, description="Fallback models tried in order when primary is circuit-broken or fails")
     
 
@@ -113,11 +148,23 @@ class Config(BaseModel):
 
     @property
     def api_key(self) -> str | None:
-        return os.environ.get("API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+        for env_name in PROVIDER_API_KEY_ENV[self.model.provider]:
+            if value := os.environ.get(env_name):
+                return value
+        return None
 
     @property
     def base_url(self) -> str | None:
-        return os.environ.get("BASE_URL") or os.environ.get("OPENROUTER_BASE_URL")
+        if self.model.base_url:
+            return self.model.base_url
+        for env_name in PROVIDER_BASE_URL_ENV[self.model.provider]:
+            if value := os.environ.get(env_name):
+                return value
+        return PROVIDER_DEFAULT_BASE_URLS[self.model.provider]
+
+    @property
+    def provider(self) -> ModelProvider:
+        return self.model.provider
 
     @property
     def model_name(self) -> str:
@@ -139,16 +186,18 @@ class Config(BaseModel):
         errors: list[str] = []
 
         if not self.api_key:
-            errors.append("No API key found. Set API_KEY or OPENROUTER_API_KEY environment variable")
+            env_names = " or ".join(PROVIDER_API_KEY_ENV[self.model.provider])
+            errors.append(f"No API key found for provider '{self.model.provider.value}'. Set {env_names}")
+
+        if self.model.provider == ModelProvider.CUSTOM and not self.base_url:
+            errors.append("Custom provider requires model.base_url or BASE_URL")
 
         if not self.cwd.exists():
             errors.append(f"Working directory does not exist: {self.cwd}")
 
         model_name = self.model.name
-        if not model_name or "/" not in model_name:
-            errors.append(
-                f"Invalid model name: '{model_name}'. Expected format: provider/model (e.g. 'openai/gpt-4')"
-            )
+        if not model_name:
+            errors.append("Model name is required")
 
         if self.model.temperature < 0 or self.model.temperature > 2:
             errors.append(f"Temperature must be between 0 and 2, got {self.model.temperature}")

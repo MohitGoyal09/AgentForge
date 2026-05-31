@@ -2,7 +2,7 @@
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
-The project currently supports streaming model responses, typed tool calls, approval gates, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, and a Rich terminal UI. The next major learning milestones are cost tracking, secret scanning, a web browser tool, git tools, deterministic replay, and read-only swarm orchestration.
+The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are cost tracking, secret scanning, a web browser tool, git tools, deterministic replay, and read-only swarm orchestration.
 
 ## Purpose
 
@@ -646,17 +646,29 @@ Configuration is loaded from:
 
 | Variable | Purpose |
 | --- | --- |
-| `API_KEY` | API key for the OpenAI-compatible provider |
-| `BASE_URL` | Base URL for the provider |
-| `OPENROUTER_API_KEY` | Alternative OpenRouter API key name |
-| `OPENROUTER_BASE_URL` | Alternative OpenRouter base URL name |
+| `OPENROUTER_API_KEY` | OpenRouter API key |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `API_KEY` | Generic fallback key for custom/OpenAI-compatible providers |
+| `OPENROUTER_BASE_URL` | Optional OpenRouter-compatible base URL override |
+| `OPENAI_BASE_URL` | Optional OpenAI-compatible base URL override |
+| `ANTHROPIC_BASE_URL` | Optional Anthropic-compatible base URL override |
+| `BASE_URL` | Generic fallback base URL for custom providers |
 
 Example:
 
 ```env
-BASE_URL=https://openrouter.ai/api/v1
-API_KEY=sk-or-v1-...
+OPENROUTER_API_KEY=sk-or-v1-...
 ```
+
+AgentForge supports these model providers:
+
+| Provider | SDK path | Typical model name |
+| --- | --- | --- |
+| `openrouter` | OpenAI-compatible | `minimax/minimax-m2.5:free` |
+| `openai` | OpenAI SDK | `gpt-4o-mini` |
+| `anthropic` | Anthropic SDK | `claude-3-5-sonnet-latest` |
+| `custom` | OpenAI-compatible | `local/model` |
 
 ### Project Config
 
@@ -671,10 +683,16 @@ skills_enabled = true
 skill_roots = [".skills"]
 
 [model]
+provider = "openrouter"
 name = "deepseek/deepseek-v4-flash:free"
 temperature = 1.0
 context_window = 256000
+max_output_tokens = 4096
 fallbacks = ["openai/gpt-4o-mini", "anthropic/claude-sonnet-4"]
+
+# For custom providers, set either model.base_url here or BASE_URL in the environment.
+# provider = "custom"
+# base_url = "http://localhost:11434/v1"
 
 # Self-healing: after 3 consecutive errors on a model,
 # its circuit breaker opens for 60s, then the agent

@@ -68,7 +68,11 @@ def run(prompt: str | None, cwd: Path | None) -> None:
         console.print()
         console.print("[warning]No API key configured.[/warning]")
         console.print("Run [bold]agentforge init[/bold] to set up your API key and configuration.")
-        console.print("Or set the [bold]OPENROUTER_API_KEY[/bold] environment variable.")
+        console.print(
+            "Or set the provider-specific key, such as "
+            "[bold]OPENROUTER_API_KEY[/bold], [bold]OPENAI_API_KEY[/bold], "
+            "or [bold]ANTHROPIC_API_KEY[/bold]."
+        )
         console.print()
         sys.exit(1)
 

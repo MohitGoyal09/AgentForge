@@ -4,12 +4,13 @@ from pathlib import Path
 
 import pytest
 from pydantic_core import ValidationError
-from agentforge_harness.config.config import Config, ModelConfig
+from agentforge_harness.config.config import Config, ModelConfig, ModelProvider
 from agentforge_harness.config.loader import _get_agent_md_files
 
 
 class TestConfigValidation:
-    def test_valid_config_passes(self):
+    def test_valid_config_passes(self, monkeypatch):
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test-key")
         cfg = Config(cwd=Path("/tmp"))
         cfg.model_name = "openai/gpt-4o-mini"
         errors = cfg.validate()
@@ -21,11 +22,12 @@ class TestConfigValidation:
         errors = cfg.validate()
         assert any("model name" in e.lower() for e in errors)
 
-    def test_model_name_without_slash_returns_error(self):
+    def test_provider_native_model_name_without_slash_is_valid(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         cfg = Config(cwd=Path("/tmp"))
-        cfg.model_name = "gpt-4o"
+        cfg.model = ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o")
         errors = cfg.validate()
-        assert any("model name" in e.lower() for e in errors)
+        assert len(errors) == 0
 
     def test_invalid_temperature_returns_error(self):
         with pytest.raises(ValidationError, match="temperature"):
@@ -58,36 +60,67 @@ class TestConfigModelName:
 
 
 class TestConfigAPIKey:
-    def test_api_key_from_env(self, monkeypatch):
+    def test_openrouter_api_key_from_env(self, monkeypatch):
         monkeypatch.delenv("API_KEY", raising=False)
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test-key")
         cfg = Config(cwd=Path("/tmp"))
         cfg.model_name = "openai/gpt-4o"
         assert cfg.api_key == "sk-or-v1-test-key"
 
-    def test_api_key_prefers_api_key_over_openrouter(self, monkeypatch):
+    def test_provider_specific_key_wins_over_generic_api_key(self, monkeypatch):
         monkeypatch.delenv("API_KEY", raising=False)
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("API_KEY", "sk-api-key")
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-key")
         cfg = Config(cwd=Path("/tmp"))
         cfg.model_name = "openai/gpt-4o"
-        assert cfg.api_key == "sk-api-key"
+        assert cfg.api_key == "sk-or-v1-key"
+
+    def test_openai_provider_uses_openai_key(self, monkeypatch):
+        monkeypatch.delenv("API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-key")
+        cfg = Config(cwd=Path("/tmp"), model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o"))
+        assert cfg.api_key == "sk-openai"
+
+    def test_anthropic_provider_uses_anthropic_key(self, monkeypatch):
+        monkeypatch.delenv("API_KEY", raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+        cfg = Config(
+            cwd=Path("/tmp"),
+            model=ModelConfig(provider=ModelProvider.ANTHROPIC, name="claude-3-5-sonnet-latest"),
+        )
+        assert cfg.api_key == "sk-ant"
 
     def test_base_url_defaults_to_openrouter(self, monkeypatch):
         monkeypatch.delenv("BASE_URL", raising=False)
-        monkeypatch.setenv("OPENROUTER_BASE_URL", "https://custom.openrouter.ai/v1")
+        monkeypatch.delenv("OPENROUTER_BASE_URL", raising=False)
         cfg = Config(cwd=Path("/tmp"))
         cfg.model_name = "openai/gpt-4o"
-        assert cfg.base_url == "https://custom.openrouter.ai/v1"
+        assert cfg.base_url == "https://openrouter.ai/api/v1"
 
-    def test_base_url_prefers_base_url(self, monkeypatch):
+    def test_provider_specific_base_url_wins_over_generic_base_url(self, monkeypatch):
         monkeypatch.delenv("OPENROUTER_BASE_URL", raising=False)
         monkeypatch.setenv("BASE_URL", "https://api.example.com/v1")
         monkeypatch.setenv("OPENROUTER_BASE_URL", "https://openrouter.ai/v1")
         cfg = Config(cwd=Path("/tmp"))
         cfg.model_name = "openai/gpt-4o"
-        assert cfg.base_url == "https://api.example.com/v1"
+        assert cfg.base_url == "https://openrouter.ai/v1"
+
+    def test_model_base_url_wins_over_env(self, monkeypatch):
+        monkeypatch.setenv("OPENROUTER_BASE_URL", "https://openrouter.ai/v1")
+        cfg = Config(
+            cwd=Path("/tmp"),
+            model=ModelConfig(base_url="https://configured.example/v1"),
+        )
+        assert cfg.base_url == "https://configured.example/v1"
+
+    def test_custom_provider_requires_base_url(self, monkeypatch):
+        monkeypatch.setenv("API_KEY", "sk-custom")
+        monkeypatch.delenv("BASE_URL", raising=False)
+        cfg = Config(cwd=Path("/tmp"), model=ModelConfig(provider=ModelProvider.CUSTOM, name="local/model"))
+        errors = cfg.validate()
+        assert any("custom provider" in e.lower() for e in errors)
 
 
 class TestAgentInstructions:
