@@ -7,6 +7,13 @@ from agentforge_harness.tools.base import Tool, ToolConfirmation, ToolInvocation
 
 
 class PatchParams(BaseModel):
+    intent: str | None = Field(
+        None,
+        description=(
+            "Short natural-language description of why this patch is being applied. "
+            "This is shown to the user during approval and stored in metadata."
+        ),
+    )
     patch: str = Field(
         ...,
         description=(
@@ -31,6 +38,14 @@ class PatchParams(BaseModel):
             "Use 1 for standard git diffs with 'a/' and 'b/' prefixes."
         ),
     )
+    create_parent_dirs: bool = Field(
+        True,
+        description=(
+            "Create missing parent directories for newly-created files when the "
+            "fallback patch engine is used. Set false when parent directories "
+            "must already exist."
+        ),
+    )
 
 
 @dataclass
@@ -44,6 +59,8 @@ class ParsedHunk:
 class ParsedFilePatch:
     path: str
     hunks: list[ParsedHunk]
+    is_new_file: bool = False
+    is_deletion: bool = False
 
 
 def _strip_path_components(path: str, strip: int) -> str:
@@ -147,6 +164,8 @@ def _parse_unified_patch(patch: str, strip: int) -> list[ParsedFilePatch]:
         path = new_path or old_path
         if not path:
             raise ValueError("Patch contains a file header without a usable path")
+        is_new_file = old_path is None and new_path is not None
+        is_deletion = new_path is None and old_path is not None
 
         index += 1
         hunks: list[ParsedHunk] = []
@@ -201,7 +220,14 @@ def _parse_unified_patch(patch: str, strip: int) -> list[ParsedFilePatch]:
 
             hunks.append(ParsedHunk(old_start=old_start, old_lines=old_lines, new_lines=new_lines))
 
-        file_patches.append(ParsedFilePatch(path=path, hunks=hunks))
+        file_patches.append(
+            ParsedFilePatch(
+                path=path,
+                hunks=hunks,
+                is_new_file=is_new_file,
+                is_deletion=is_deletion,
+            )
+        )
 
     if not file_patches:
         raise ValueError("Patch does not contain any parseable file hunks")
@@ -240,12 +266,28 @@ def _find_hunk_position(lines: list[str], old_lines: list[str], preferred_index:
     return None
 
 
-def apply_patch_fallback(cwd: Path, patch: str, strip: int, dry_run: bool) -> list[Path]:
+def apply_patch_fallback(
+    cwd: Path,
+    patch: str,
+    strip: int,
+    dry_run: bool,
+    create_parent_dirs: bool = True,
+) -> list[Path]:
     file_patches = _parse_unified_patch(patch, strip)
     affected_paths = validate_patch_paths(cwd, [file_patch.path for file_patch in file_patches])
     new_contents: dict[Path, str] = {}
+    deletions: list[Path] = []
 
     for file_patch, path in zip(file_patches, affected_paths):
+        if file_patch.is_new_file and not path.parent.exists() and not create_parent_dirs:
+            raise ValueError(
+                f"Parent directory does not exist for new file: {file_patch.path}. "
+                "Set create_parent_dirs=true or create the directory first."
+            )
+
+        if file_patch.is_deletion and not path.exists():
+            raise ValueError(f"Cannot delete missing file: {file_patch.path}")
+
         content = path.read_text(encoding="utf-8") if path.exists() else ""
         lines = content.splitlines(keepends=True)
         offset = 0
@@ -261,14 +303,40 @@ def apply_patch_fallback(cwd: Path, patch: str, strip: int, dry_run: bool) -> li
             lines = lines[:position] + hunk.new_lines + lines[position + len(hunk.old_lines) :]
             offset += len(hunk.new_lines) - len(hunk.old_lines)
 
-        new_contents[path] = "".join(lines)
+        if file_patch.is_deletion:
+            deletions.append(path)
+        else:
+            new_contents[path] = "".join(lines)
 
     if not dry_run:
+        for path in deletions:
+            path.unlink()
         for path, content in new_contents.items():
-            path.parent.mkdir(parents=True, exist_ok=True)
+            if create_parent_dirs:
+                path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
 
     return affected_paths
+
+
+def validate_parent_directory_policy(
+    cwd: Path,
+    patch: str,
+    strip: int,
+    create_parent_dirs: bool,
+) -> None:
+    if create_parent_dirs:
+        return
+
+    file_patches = _parse_unified_patch(patch, strip)
+    affected_paths = validate_patch_paths(cwd, [file_patch.path for file_patch in file_patches])
+
+    for file_patch, path in zip(file_patches, affected_paths):
+        if file_patch.is_new_file and not path.parent.exists():
+            raise ValueError(
+                f"Parent directory does not exist for new file: {file_patch.path}. "
+                "Set create_parent_dirs=true or create the directory first."
+            )
 
 
 class ApplyPatchTool(Tool):
@@ -314,7 +382,7 @@ class ApplyPatchTool(Tool):
         return ToolConfirmation(
             tool_name=self.name,
             params=invocation.params,
-            description=f"Apply patch to {len(paths)} file(s)",
+            description=params.intent or f"Apply patch to {len(paths)} file(s)",
             affected_paths=affected_paths,
             diff_text=patch,
             is_dangerous=True,
@@ -339,8 +407,26 @@ class ApplyPatchTool(Tool):
 
         try:
             affected_paths = validate_patch_paths(cwd, paths)
+            validate_parent_directory_policy(
+                cwd,
+                patch,
+                params.strip,
+                params.create_parent_dirs,
+            )
         except ValueError as e:
-            return ToolResult.error_result(str(e))
+            return ToolResult.error_result(
+                str(e),
+                summary="Patch path validation failed",
+                diff_text=patch,
+                recovery_hint="Fix the patch paths or parent directory policy, then retry.",
+                metadata={
+                    "paths": paths,
+                    "dry_run": params.dry_run,
+                    "strip": params.strip,
+                    "intent": params.intent,
+                    "create_parent_dirs": params.create_parent_dirs,
+                },
+            )
 
         check = run_git_apply(cwd, patch, params.strip, check_only=True)
         if check.returncode != 0:
@@ -351,6 +437,7 @@ class ApplyPatchTool(Tool):
                     patch,
                     params.strip,
                     dry_run=True,
+                    create_parent_dirs=params.create_parent_dirs,
                 )
                 if params.dry_run:
                     return ToolResult.success_result(
@@ -363,6 +450,8 @@ class ApplyPatchTool(Tool):
                             "paths": [str(path) for path in fallback_paths],
                             "dry_run": True,
                             "strip": params.strip,
+                            "intent": params.intent,
+                            "create_parent_dirs": params.create_parent_dirs,
                             "fallback": True,
                         },
                     )
@@ -379,6 +468,8 @@ class ApplyPatchTool(Tool):
                         "paths": [str(path) for path in affected_paths],
                         "dry_run": True,
                         "strip": params.strip,
+                        "intent": params.intent,
+                        "create_parent_dirs": params.create_parent_dirs,
                     },
                 )
 
@@ -388,6 +479,7 @@ class ApplyPatchTool(Tool):
                     patch,
                     params.strip,
                     dry_run=False,
+                    create_parent_dirs=params.create_parent_dirs,
                 )
             except Exception as fallback_error:
                 output = strict_output + f"\nFallback apply failed: {fallback_error}"
@@ -402,6 +494,8 @@ class ApplyPatchTool(Tool):
                         "paths": [str(path) for path in affected_paths],
                         "dry_run": False,
                         "strip": params.strip,
+                        "intent": params.intent,
+                        "create_parent_dirs": params.create_parent_dirs,
                     },
                 )
 
@@ -415,6 +509,8 @@ class ApplyPatchTool(Tool):
                     "paths": [str(path) for path in fallback_paths],
                     "dry_run": False,
                     "strip": params.strip,
+                    "intent": params.intent,
+                    "create_parent_dirs": params.create_parent_dirs,
                     "fallback": True,
                 },
             )
@@ -430,6 +526,8 @@ class ApplyPatchTool(Tool):
                     "paths": [str(path) for path in affected_paths],
                     "dry_run": True,
                     "strip": params.strip,
+                    "intent": params.intent,
+                    "create_parent_dirs": params.create_parent_dirs,
                 },
             )
 
@@ -447,6 +545,8 @@ class ApplyPatchTool(Tool):
                     "paths": [str(path) for path in affected_paths],
                     "dry_run": False,
                     "strip": params.strip,
+                    "intent": params.intent,
+                    "create_parent_dirs": params.create_parent_dirs,
                 },
             )
 
@@ -460,5 +560,7 @@ class ApplyPatchTool(Tool):
                 "paths": [str(path) for path in affected_paths],
                 "dry_run": False,
                 "strip": params.strip,
+                "intent": params.intent,
+                "create_parent_dirs": params.create_parent_dirs,
             },
         )

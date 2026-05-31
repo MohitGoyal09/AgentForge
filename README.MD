@@ -233,7 +233,7 @@ Built-in tools include:
 | `write_file` | write | Create or overwrite files |
 | `append_file` | write | Append text to the end of a file |
 | `edit` | write | Replace exact text in files |
-| `apply_patch` | write | Apply a unified diff across one or more files |
+| `apply_patch` | write | Apply a unified diff across one or more files with dry-run validation and patch intent metadata |
 | `git_diff` | read | Inspect working tree or staged git changes without mutating the repo |
 | `shell` | shell | Run shell commands with timeout and approval |
 | `list_dir` | read | List directory entries |

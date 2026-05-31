@@ -9,6 +9,7 @@
 - Provider and setup tests covering config resolution, Anthropic conversion, and generated TOML shape.
 - Read-only `git_diff` tool for structured repository diff inspection.
 - `CONTRIBUTING.md` and GitHub issue templates for open-source contributors.
+- Patch tool intent metadata, parent-directory policy, deletion fallback handling, and edge-case tests.
 
 ### Changed
 - Roadmap rewritten as an open-source release roadmap with pre-v1 quick wins and v1 release criteria.

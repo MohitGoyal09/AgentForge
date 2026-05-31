@@ -7,6 +7,7 @@ from agentforge_harness.config.config import Config
 from agentforge_harness.tools.base import ToolInvocation
 from agentforge_harness.tools.builtin.todo import TodosTool
 from agentforge_harness.tools.builtin.memory import MemoryTool
+from agentforge_harness.tools.builtin.patch import ApplyPatchTool
 from agentforge_harness.tools.builtin.shell import ShellTool
 from agentforge_harness.tools.builtin.read_file import ReadFileTool
 from agentforge_harness.tools.builtin.write_file import WriteFileTool
@@ -59,6 +60,11 @@ def memory_tool(alt_config: Config, monkeypatch: pytest.MonkeyPatch, tmp_path: P
     data_dir.mkdir()
     monkeypatch.setattr("agentforge_harness.tools.builtin.memory.get_data_dir", lambda: data_dir)
     return MemoryTool(alt_config)
+
+
+@pytest.fixture
+def apply_patch_tool(config: Config) -> ApplyPatchTool:
+    return ApplyPatchTool(config)
 
 
 @pytest.fixture

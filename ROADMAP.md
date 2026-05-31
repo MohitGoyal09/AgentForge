@@ -92,7 +92,7 @@ These are small, high-leverage improvements pulled from the older internal PRD-s
 | P0 | Open | Add prompt-injection fixture tests for `read_file` and `web_fetch` content | Tests the most important safety boundary for coding agents. |
 | P1 | Open | Add `/cost` using token usage already collected | Turns existing telemetry into useful feedback. |
 | P1 | Done | Add structured `git_diff` read-only tool | Safer and more useful than asking the model to parse raw shell output. |
-| P1 | Open | Improve patch tests around symlinks, parent dirs, and no-newline files | Patch is powerful, so confidence here matters. |
+| P1 | Done | Improve patch tests around symlinks, parent dirs, and no-newline files | Patch is powerful, so confidence here matters. |
 | P1 | Open | Add `--json` output for `/stats` or a new report command | Helps automation and future eval tooling. |
 | P1 | Done | Add a minimal `CONTRIBUTING.md` | Makes the project feel like an open-source package, not a private experiment. |
 | P1 | Done | Add issue templates for bug reports and feature requests | Makes outside feedback easier to act on. |
@@ -104,9 +104,8 @@ Recommended order before v1:
 1. Secret redaction for tool outputs.
 2. Prompt-injection test fixtures.
 3. `/cost` command from existing token usage.
-4. Improve patch security and edge-case tests.
-5. Add automation-friendly JSON reporting.
-6. Consider HTML session export once the core safety work is stronger.
+4. Add automation-friendly JSON reporting.
+5. Consider HTML session export once the core safety work is stronger.
 
 ## Security Roadmap
 
