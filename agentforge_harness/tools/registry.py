@@ -5,6 +5,7 @@ from agentforge_harness.config.config import Config
 from agentforge_harness.hooks.hook_system import HookSystem
 from agentforge_harness.safety.approval import ApprovalContext, ApprovalDecision, ApprovalManager
 from agentforge_harness.tools.base import Tool, ToolInvocation, ToolResult, ToolKind
+from agentforge_harness.utils.redaction import redact_tool_result
 import logging
 
 from agentforge_harness.tools.builtin import get_all_builtin_tools
@@ -67,6 +68,18 @@ class ToolRegistry:
     def get_schemas(self, mode: AgentMode | None = None) -> list[dict[str, Any]]:
         return [tool.to_openai_schema() for tool in self.get_tools(mode=mode)]
 
+    async def _finish_tool_result(
+        self,
+        hook_system: HookSystem,
+        name: str,
+        params: dict[str, Any],
+        result: ToolResult,
+    ) -> ToolResult:
+        if self.config.redaction_enabled:
+            result = redact_tool_result(result)
+        await hook_system.trigger_after_tool(name, params, result)
+        return result
+
     async def invoke(
         self, 
         name: str, 
@@ -80,8 +93,7 @@ class ToolRegistry:
             result = ToolResult.error_result(
                 f"Unknown tool: {name}", metadata={"tool_name": name}
             )
-            await hook_system.trigger_after_tool(name, params, result)
-            return result
+            return await self._finish_tool_result(hook_system, name, params, result)
 
         validation_errors = tool.validate_params(params)
         if validation_errors:
@@ -93,8 +105,7 @@ class ToolRegistry:
                 },
             )
 
-            await hook_system.trigger_after_tool(name, params, result)
-            return result
+            return await self._finish_tool_result(hook_system, name, params, result)
 
 
         await hook_system.trigger_before_tool(name, params)
@@ -119,15 +130,13 @@ class ToolRegistry:
                     result = ToolResult.error_result(
                         "Operation rejected by safety policy"
                     )
-                    await hook_system.trigger_after_tool(name, params, result)
-                    return result
+                    return await self._finish_tool_result(hook_system, name, params, result)
                 elif decision == ApprovalDecision.NEEDS_CONFIRMATION:
                     approved = approval_manager.request_confirmation(confirmation)
 
                     if not approved:
                         result = ToolResult.error_result("User rejected the operation")
-                        await hook_system.trigger_after_tool(name, params, result)
-                        return result
+                        return await self._finish_tool_result(hook_system, name, params, result)
 
         try:
             result = await tool.execute(invocation)
@@ -139,8 +148,7 @@ class ToolRegistry:
                     "tool_name": name,
                 },
             )
-        await hook_system.trigger_after_tool(name, params, result)
-        return result
+        return await self._finish_tool_result(hook_system, name, params, result)
 
 
 def create_default_registry(config: Config) -> ToolRegistry:

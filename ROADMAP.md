@@ -13,7 +13,7 @@ AgentForge already includes the main pieces of a coding-agent harness:
 | Agent loop | ReAct-style async loop with streamed events |
 | Model providers | OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible endpoints |
 | Tools | File tools, shell, search/fetch, todos, memory, patch, and subagents |
-| Safety | Approval policies, path checks, shell safety rules, and mutating-tool prompts |
+| Safety | Approval policies, path checks, shell safety rules, mutating-tool prompts, and secret redaction |
 | Context | Token estimation, pruning, compression, and loop detection |
 | Skills | Progressive SKILL.md discovery and activation |
 | Modes | Plan and build modes with tool restrictions |
@@ -41,7 +41,7 @@ Focus: make harness changes measurable instead of vibe-based.
 - Add a lightweight eval runner with mock and real-model modes.
 - Add regression scenarios for file edits, shell use, patching, skills, and plan/build mode.
 - Add prompt-injection tests for files, shell output, and web content.
-- Add secret scanning/redaction for tool outputs before they enter model context.
+- Add prompt-injection tests and stricter untrusted-content handling.
 - Track token usage and estimated cost per turn/session.
 - Save eval reports as artifacts that can be compared across runs.
 
@@ -88,7 +88,7 @@ These are small, high-leverage improvements pulled from the older internal PRD-s
 | --- | --- | --- | --- |
 | P0 | Done | Add a smoke test for `agentforge init` output | Prevents broken first-run config files. |
 | P0 | Done | Add provider adapter tests for OpenAI-compatible and Anthropic tool calls | Keeps multi-provider support from silently regressing. |
-| P0 | Open | Add secret redaction for tool outputs | Stops obvious key leaks from entering model context or logs. |
+| P0 | Done | Add secret redaction for tool outputs | Stops obvious key leaks from entering model context or logs. |
 | P0 | Open | Add prompt-injection fixture tests for `read_file` and `web_fetch` content | Tests the most important safety boundary for coding agents. |
 | P1 | Open | Add `/cost` using token usage already collected | Turns existing telemetry into useful feedback. |
 | P1 | Done | Add structured `git_diff` read-only tool | Safer and more useful than asking the model to parse raw shell output. |
@@ -101,11 +101,10 @@ These are small, high-leverage improvements pulled from the older internal PRD-s
 
 Recommended order before v1:
 
-1. Secret redaction for tool outputs.
-2. Prompt-injection test fixtures.
-3. `/cost` command from existing token usage.
-4. Add automation-friendly JSON reporting.
-5. Consider HTML session export once the core safety work is stronger.
+1. Prompt-injection test fixtures.
+2. `/cost` command from existing token usage.
+3. Add automation-friendly JSON reporting.
+4. Consider HTML session export once the core safety work is stronger.
 
 ## Security Roadmap
 
@@ -113,7 +112,7 @@ Security work should land in layers. AgentForge should be honest about its prote
 
 | Layer | Planned work |
 | --- | --- |
-| Output hygiene | Redact secrets, strip control characters, cap large outputs consistently |
+| Output hygiene | Secret redaction is in place; strip control characters and cap large outputs consistently |
 | Prompt injection | Wrap untrusted file/web content clearly and test known attacks |
 | Shell safety | Expand obfuscation detection and add stricter allowlist mode |
 | Config safety | Warn on risky config/env file permissions and committed `.env` files |

@@ -2,7 +2,7 @@
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
-The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are cost tracking, secret scanning, a web browser tool, git tools, deterministic replay, and read-only swarm orchestration.
+The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, secret redaction, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are cost tracking, prompt-injection fixture tests, a web browser tool, deterministic replay, and read-only swarm orchestration.
 
 ## Purpose
 
@@ -253,8 +253,9 @@ The registry is responsible for:
 3. Running before-tool hooks.
 4. Checking approval for mutating operations.
 5. Executing the tool.
-6. Running after-tool hooks.
-7. Returning a `ToolResult`.
+6. Redacting secrets from model-visible tool results when enabled.
+7. Running after-tool hooks.
+8. Returning a `ToolResult`.
 
 Future improvement: evolve `ToolResult` from mostly raw text into a structured observation:
 
@@ -272,6 +273,10 @@ Future improvement: evolve `ToolResult` from mostly raw text into a structured o
 This is one of the most important harness-learning upgrades because model recovery quality depends heavily on observation quality.
 
 ### Safety and Approval
+
+Tool outputs pass through centralized secret redaction in `agentforge_harness/utils/redaction.py` before after-tool hooks, model context, TUI events, persistence, and exports see the result. Redaction is enabled by default and records non-secret metadata such as redaction count and detected secret kinds.
+
+Current redaction coverage includes common OpenAI/OpenRouter/Anthropic API key shapes, GitHub tokens, JWTs, private key blocks, and generic `API_KEY`/`TOKEN`/`SECRET`/`PASSWORD` assignments. This protects obvious leaks in observations, but it is not a sandbox and does not make arbitrary tools or MCP servers safe.
 
 The approval layer in `agentforge_harness/safety/approval.py` classifies operations using:
 
@@ -679,6 +684,7 @@ Example `.agentforge/config.toml`:
 hooks_enabled = true
 approval = "on-request"
 max_turns = 100
+redaction_enabled = true
 skills_enabled = true
 # Optional extra roots. `.agentforge/skills` is detected automatically.
 skill_roots = [".skills"]
