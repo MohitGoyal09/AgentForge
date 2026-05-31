@@ -1,5 +1,6 @@
 from agentforge_harness.tools.builtin.append_file import AppendFileTool
 from agentforge_harness.tools.builtin.edit_file import EditTool
+from agentforge_harness.tools.builtin.git_diff import GitDiffTool
 from agentforge_harness.tools.builtin.glob import GlobTool
 from agentforge_harness.tools.builtin.grep import GrepTool
 from agentforge_harness.tools.builtin.list_dir import ListDirTool
@@ -17,6 +18,7 @@ __all__ = [
     "WriteFileTool",
     "AppendFileTool",
     "EditTool",
+    "GitDiffTool",
     "ShellTool",
     "ListDirTool",
     "GrepTool",
@@ -35,6 +37,7 @@ def get_all_builtin_tools() -> list[type]:
         WriteFileTool,
         AppendFileTool,
         EditTool,
+        GitDiffTool,
         ShellTool,
         ListDirTool,
         GrepTool,

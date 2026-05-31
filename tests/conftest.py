@@ -15,6 +15,7 @@ from agentforge_harness.tools.builtin.edit_file import EditTool
 from agentforge_harness.tools.builtin.list_dir import ListDirTool
 from agentforge_harness.tools.builtin.grep import GrepTool
 from agentforge_harness.tools.builtin.glob import GlobTool
+from agentforge_harness.tools.builtin.git_diff import GitDiffTool
 from agentforge_harness.tools.builtin.web_search import WebSearchTool
 from agentforge_harness.tools.builtin.web_fetch import WebFetchTool
 
@@ -98,6 +99,11 @@ def grep_tool(config: Config) -> GrepTool:
 @pytest.fixture
 def glob_tool(config: Config) -> GlobTool:
     return GlobTool(config)
+
+
+@pytest.fixture
+def git_diff_tool(config: Config) -> GitDiffTool:
+    return GitDiffTool(config)
 
 
 @pytest.fixture

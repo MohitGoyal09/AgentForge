@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from click.testing import CliRunner
+
 try:
     import tomllib
 except ModuleNotFoundError:
     import tomli as tomllib
 
+from agentforge_harness.cli.run import cli
 from agentforge_harness.cli.setup import _write_config_file
 
 
@@ -42,3 +45,28 @@ def test_setup_config_writes_custom_base_url(tmp_path: Path):
     data = tomllib.loads(config_path.read_text(encoding="utf-8"))
 
     assert data["model"]["base_url"] == "http://localhost:11434/v1"
+
+
+def test_agentforge_init_smoke_writes_provider_files(monkeypatch, tmp_path: Path):
+    config_dir = tmp_path / "agentforge-config"
+    monkeypatch.setattr("agentforge_harness.cli.setup.get_config_dir", lambda: config_dir)
+    monkeypatch.setattr("getpass.getpass", lambda prompt="", stream=None: "sk-openai-test")
+
+    result = CliRunner().invoke(
+        cli,
+        ["init"],
+        input="openai\n\n\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Setup complete" in result.output
+
+    env_text = (config_dir / ".env").read_text(encoding="utf-8")
+    assert "OPENAI_API_KEY=sk-openai-test" in env_text
+    assert "OPENAI_BASE_URL" not in env_text
+
+    config = tomllib.loads((config_dir / "config.toml").read_text(encoding="utf-8"))
+    assert config["approval"] == "on-request"
+    assert config["model"]["provider"] == "openai"
+    assert config["model"]["name"] == "gpt-4o-mini"
+    assert "base_url" not in config["model"]

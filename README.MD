@@ -156,7 +156,7 @@ agentforge/
 |-- agentforge_harness/        # Importable Python package
 |   |-- agent/                 # Agent loop, events, persistence, and sessions
 |   |-- cli/                   # Click CLI and interactive commands
-|   |-- client/                # OpenAI-compatible LLM client
+|   |-- client/                # Provider-aware LLM client
 |   |-- config/                # Pydantic config and loaders
 |   |-- context/               # Message history, compaction, loop detection
 |   |-- hooks/                 # Before/after agent/tool hooks
@@ -210,7 +210,7 @@ This is a hybrid ReAct/function-calling loop: the model reasons in natural langu
 - `PersistenceManager`
 - session ID and turn count
 
-The session owns snapshot creation and restoration. It captures conversation messages, token usage, config metadata, active tools, MCP server names, todos, and event sequence state. Mode state and active skills are represented in the snapshot schema, but the actual skill loader and mode controller are still planned.
+The session owns snapshot creation and restoration. It captures conversation messages, token usage, config metadata, active tools, MCP server names, todos, active mode, active skills, and event sequence state.
 
 ### Tools
 
@@ -234,6 +234,7 @@ Built-in tools include:
 | `append_file` | write | Append text to the end of a file |
 | `edit` | write | Replace exact text in files |
 | `apply_patch` | write | Apply a unified diff across one or more files |
+| `git_diff` | read | Inspect working tree or staged git changes without mutating the repo |
 | `shell` | shell | Run shell commands with timeout and approval |
 | `list_dir` | read | List directory entries |
 | `grep` | read | Search file contents with regex |

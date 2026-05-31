@@ -84,29 +84,29 @@ v1 should include:
 
 These are small, high-leverage improvements pulled from the older internal PRD-style notes. They are good candidates before v1 because they improve trust, packaging quality, or day-to-day usability without requiring a large new architecture.
 
-| Priority | Quick win | Why it matters |
-| --- | --- | --- |
-| P0 | Add a smoke test for `agentforge init` output | Prevents broken first-run config files. |
-| P0 | Add provider adapter tests for OpenAI-compatible and Anthropic tool calls | Keeps multi-provider support from silently regressing. |
-| P0 | Add secret redaction for tool outputs | Stops obvious key leaks from entering model context or logs. |
-| P0 | Add prompt-injection fixture tests for `read_file` and `web_fetch` content | Tests the most important safety boundary for coding agents. |
-| P1 | Add `/cost` using token usage already collected | Turns existing telemetry into useful feedback. |
-| P1 | Add structured `git_diff` read-only tool | Safer and more useful than asking the model to parse raw shell output. |
-| P1 | Improve patch tests around symlinks, parent dirs, and no-newline files | Patch is powerful, so confidence here matters. |
-| P1 | Add `--json` output for `/stats` or a new report command | Helps automation and future eval tooling. |
-| P1 | Add a minimal `CONTRIBUTING.md` | Makes the project feel like an open-source package, not a private experiment. |
-| P1 | Add issue templates for bug reports and feature requests | Makes outside feedback easier to act on. |
-| P2 | Add HTML session export | Useful, but not required for the core harness. |
-| P2 | Add browser tool for local QA | Valuable, but it brings dependency and sandboxing complexity. |
+| Priority | Status | Quick win | Why it matters |
+| --- | --- | --- | --- |
+| P0 | Done | Add a smoke test for `agentforge init` output | Prevents broken first-run config files. |
+| P0 | Done | Add provider adapter tests for OpenAI-compatible and Anthropic tool calls | Keeps multi-provider support from silently regressing. |
+| P0 | Open | Add secret redaction for tool outputs | Stops obvious key leaks from entering model context or logs. |
+| P0 | Open | Add prompt-injection fixture tests for `read_file` and `web_fetch` content | Tests the most important safety boundary for coding agents. |
+| P1 | Open | Add `/cost` using token usage already collected | Turns existing telemetry into useful feedback. |
+| P1 | Done | Add structured `git_diff` read-only tool | Safer and more useful than asking the model to parse raw shell output. |
+| P1 | Open | Improve patch tests around symlinks, parent dirs, and no-newline files | Patch is powerful, so confidence here matters. |
+| P1 | Open | Add `--json` output for `/stats` or a new report command | Helps automation and future eval tooling. |
+| P1 | Done | Add a minimal `CONTRIBUTING.md` | Makes the project feel like an open-source package, not a private experiment. |
+| P1 | Done | Add issue templates for bug reports and feature requests | Makes outside feedback easier to act on. |
+| P2 | Open | Add HTML session export | Useful, but not required for the core harness. |
+| P2 | Open | Add browser tool for local QA | Valuable, but it brings dependency and sandboxing complexity. |
 
 Recommended order before v1:
 
-1. Setup smoke tests and provider adapter tests.
-2. Secret redaction for tool outputs.
-3. Prompt-injection test fixtures.
-4. `/cost` command from existing token usage.
-5. Minimal contributor docs and issue templates.
-6. Read-only `git_diff`.
+1. Secret redaction for tool outputs.
+2. Prompt-injection test fixtures.
+3. `/cost` command from existing token usage.
+4. Improve patch security and edge-case tests.
+5. Add automation-friendly JSON reporting.
+6. Consider HTML session export once the core safety work is stronger.
 
 ## Security Roadmap
 

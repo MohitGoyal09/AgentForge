@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from agentforge_harness.client.llm_client import LLMClient
+from agentforge_harness.client.response import StreamEventType
 from agentforge_harness.config.config import Config, ModelConfig, ModelProvider
 
 
@@ -107,3 +109,66 @@ def test_anthropic_tool_schema_uses_input_schema():
             "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}},
         }
     ]
+
+
+async def test_anthropic_provider_emits_text_tool_and_usage_events(monkeypatch):
+    captured = {}
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(type="text", text="I will read it."),
+                    SimpleNamespace(
+                        type="tool_use",
+                        id="toolu_1",
+                        name="read_file",
+                        input={"path": "README.MD"},
+                    ),
+                ],
+                usage=SimpleNamespace(input_tokens=12, output_tokens=7),
+                stop_reason="tool_use",
+            )
+
+    class FakeAnthropicClient:
+        messages = FakeMessages()
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+    config = Config(
+        cwd=Path("/tmp"),
+        model=ModelConfig(provider=ModelProvider.ANTHROPIC, name="claude-3-5-sonnet-latest"),
+    )
+    client = LLMClient(config)
+    monkeypatch.setattr(client, "get_anthropic_client", lambda: FakeAnthropicClient())
+
+    events = [
+        event
+        async for event in client.chat_completion(
+            messages=[{"role": "user", "content": "Read README"}],
+            tools=[
+                {
+                    "name": "read_file",
+                    "description": "Read file",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"path": {"type": "string"}},
+                        "required": ["path"],
+                    },
+                }
+            ],
+        )
+    ]
+
+    assert captured["model"] == "claude-3-5-sonnet-latest"
+    assert captured["tools"][0]["name"] == "read_file"
+    assert [event.type for event in events] == [
+        StreamEventType.TEXT_DELTA,
+        StreamEventType.TOOL_CALL_START,
+        StreamEventType.TOOL_CALL_COMPLETE,
+        StreamEventType.MESSAGE_COMPLETE,
+    ]
+    assert events[2].tool_call is not None
+    assert events[2].tool_call.arguments == {"path": "README.MD"}
+    assert events[3].token_usage is not None
+    assert events[3].token_usage.total_tokens == 19
