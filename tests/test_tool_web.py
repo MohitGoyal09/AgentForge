@@ -2,7 +2,19 @@ from __future__ import annotations
 
 import pytest
 from pydantic_core import ValidationError
-from tools.base import ToolInvocation
+from agentforge_harness.tools.base import ToolInvocation
+
+
+class FakeDDGS:
+    def text(self, *args, **kwargs):
+        return [
+            {
+                "title": f"Result {index}",
+                "href": f"https://example.com/{index}",
+                "body": f"Snippet {index}",
+            }
+            for index in range(1, 21)
+        ]
 
 
 class TestWebSearchTool:
@@ -12,7 +24,8 @@ class TestWebSearchTool:
         )
         assert not result.success
 
-    async def test_max_results_in_metadata(self, web_search_tool, invocation):
+    async def test_max_results_in_metadata(self, web_search_tool, invocation, monkeypatch):
+        monkeypatch.setattr("agentforge_harness.tools.builtin.web_search.DDGS", lambda: FakeDDGS())
         result = await web_search_tool.execute(
             ToolInvocation(params={"query": "test"}, cwd=invocation.cwd)
         )
@@ -24,7 +37,8 @@ class TestWebSearchTool:
         )
         assert result.recovery_hint
 
-    async def test_next_actions_on_success(self, web_search_tool, invocation):
+    async def test_next_actions_on_success(self, web_search_tool, invocation, monkeypatch):
+        monkeypatch.setattr("agentforge_harness.tools.builtin.web_search.DDGS", lambda: FakeDDGS())
         result = await web_search_tool.execute(
             ToolInvocation(params={"query": "python"}, cwd=invocation.cwd)
         )
@@ -53,7 +67,7 @@ class TestWebFetchTool:
 
     async def test_timeout_validation_at_pydantic_level(self):
         with pytest.raises(ValidationError, match="timeout"):
-            from tools.builtin.web_fetch import WebFetchParams
+            from agentforge_harness.tools.builtin.web_fetch import WebFetchParams
             WebFetchParams(url="https://example.com", timeout=3)
 
     async def test_recovery_hint_on_network_error(self, web_fetch_tool, invocation):

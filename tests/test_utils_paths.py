@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from utils.paths import display_path_rel_to_cwd, ensure_parent_directory, find_source_files, resolve_path
+from agentforge_harness.utils.paths import display_path_rel_to_cwd, ensure_parent_directory, find_source_files, resolve_path
 
 
 class TestResolvePath:

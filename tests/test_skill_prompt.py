@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from config.config import Config
-from prompts.system import get_system_prompt
-from skills.manager import SkillMetadata
+from agentforge_harness.config.config import Config
+from agentforge_harness.prompts.system import get_system_prompt
+from agentforge_harness.skills.manager import SkillMetadata
 
 
 def test_inactive_skill_descriptions_are_not_in_system_prompt(tmp_path: Path) -> None:

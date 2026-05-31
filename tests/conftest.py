@@ -3,20 +3,20 @@ from __future__ import annotations
 from pathlib import Path
 import pytest
 
-from config.config import Config
-from tools.base import ToolInvocation
-from tools.builtin.todo import TodosTool
-from tools.builtin.memory import MemoryTool
-from tools.builtin.shell import ShellTool
-from tools.builtin.read_file import ReadFileTool
-from tools.builtin.write_file import WriteFileTool
-from tools.builtin.append_file import AppendFileTool
-from tools.builtin.edit_file import EditTool
-from tools.builtin.list_dir import ListDirTool
-from tools.builtin.grep import GrepTool
-from tools.builtin.glob import GlobTool
-from tools.builtin.web_search import WebSearchTool
-from tools.builtin.web_fetch import WebFetchTool
+from agentforge_harness.config.config import Config
+from agentforge_harness.tools.base import ToolInvocation
+from agentforge_harness.tools.builtin.todo import TodosTool
+from agentforge_harness.tools.builtin.memory import MemoryTool
+from agentforge_harness.tools.builtin.shell import ShellTool
+from agentforge_harness.tools.builtin.read_file import ReadFileTool
+from agentforge_harness.tools.builtin.write_file import WriteFileTool
+from agentforge_harness.tools.builtin.append_file import AppendFileTool
+from agentforge_harness.tools.builtin.edit_file import EditTool
+from agentforge_harness.tools.builtin.list_dir import ListDirTool
+from agentforge_harness.tools.builtin.grep import GrepTool
+from agentforge_harness.tools.builtin.glob import GlobTool
+from agentforge_harness.tools.builtin.web_search import WebSearchTool
+from agentforge_harness.tools.builtin.web_fetch import WebFetchTool
 
 
 @pytest.fixture
@@ -56,7 +56,7 @@ def todos_tool(config: Config) -> TodosTool:
 def memory_tool(alt_config: Config, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> MemoryTool:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    monkeypatch.setattr("tools.builtin.memory.get_data_dir", lambda: data_dir)
+    monkeypatch.setattr("agentforge_harness.tools.builtin.memory.get_data_dir", lambda: data_dir)
     return MemoryTool(alt_config)
 
 

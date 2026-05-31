@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from context.loop_detector import LoopDetector
+from agentforge_harness.context.loop_detector import LoopDetector
 
 
 class TestLoopDetector:

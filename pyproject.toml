@@ -1,27 +1,28 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentforge"
+name = "agentforge-harness"
 version = "0.1.0"
 description = "An open-source agentic coding harness for building and studying AI coding agents"
 readme = "README.MD"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
-    {name = "AgentForge Contributors"},
+    {name = "Mohit Goyal"},
 ]
-keywords = ["ai", "codex", "coding-agent", "llm", "agent-harness"]
+keywords = ["ai", "coding-agent", "llm", "agent-harness", "agentforge"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Build Tools",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -40,19 +41,19 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/anthropics/agentforge"
-Repository = "https://github.com/anthropics/agentforge"
-Documentation = "https://github.com/anthropics/agentforge#readme"
+Homepage = "https://github.com/MohitGoyal09/claudecode"
+Repository = "https://github.com/MohitGoyal09/claudecode"
+Documentation = "https://github.com/MohitGoyal09/claudecode#readme"
 
 [project.scripts]
-agentforge = "cli.run:cli"
+agentforge = "agentforge_harness.cli.run:cli"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+dev = ["build>=1.2", "pytest>=8.0", "pytest-asyncio>=0.24", "twine>=6.0", "wheel>=0.43"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["agent*", "cli*", "client*", "config*", "context*", "hooks*", "prompts*", "safety*", "tools*", "ui*", "utils*", "skills*"]
+include = ["agentforge_harness*"]

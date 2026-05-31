@@ -3,5 +3,9 @@ python-dotenv
 click
 tiktoken
 platformdirs
-tomli
+pydantic>=2.0
+rich
+httpx
+tomli; python_version < "3.11"
 ddgs
+fastmcp

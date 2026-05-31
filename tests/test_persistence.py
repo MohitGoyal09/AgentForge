@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from client.response import TokenUsage
-from agent.persistence import PersistenceManager, SessionSnapshot
+from agentforge_harness.client.response import TokenUsage
+from agentforge_harness.agent.persistence import PersistenceManager, SessionSnapshot
 
 
 SAMPLE_SNAPSHOT = SessionSnapshot(

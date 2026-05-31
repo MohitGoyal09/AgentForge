@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from skills.manager import SkillManager
+from agentforge_harness.skills.manager import SkillManager
 
 
 def write_skill(root: Path, name: str, description: str) -> None:

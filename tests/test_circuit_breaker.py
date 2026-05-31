@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from safety.circuit_breaker import CircuitBreakerRegistry, CircuitState
+from agentforge_harness.safety.circuit_breaker import CircuitBreakerRegistry, CircuitState
 
 
 class TestCircuitBreakerBasics:

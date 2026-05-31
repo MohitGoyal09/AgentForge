@@ -240,7 +240,7 @@ Safety:
 
 ### Multi-File Edit
 
-**Already shipped:** `ApplyPatchTool` (`tools/builtin/patch.py`) — unified diff with `git apply` + custom fallback, dry-run validation, path traversal protection, `.git` path blocking, `strip` prefix handling, no-newline-at-eof support.
+**Already shipped:** `ApplyPatchTool` (`agentforge_harness/tools/builtin/patch.py`) — unified diff with `git apply` + custom fallback, dry-run validation, path traversal protection, `.git` path blocking, `strip` prefix handling, no-newline-at-eof support.
 
 **Still missing from the tool:**
 - `description` field: model should explain the patch's intent in natural language

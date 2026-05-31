@@ -1,0 +1,9 @@
+include LICENSE
+include README.MD
+include pyproject.toml
+prune tests
+prune scripts
+prune .agentforge
+global-exclude .DS_Store
+global-exclude __pycache__
+global-exclude *.py[cod]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tools.base import ToolInvocation
+from agentforge_harness.tools.base import ToolInvocation
 
 
 class TestWriteFileTool:

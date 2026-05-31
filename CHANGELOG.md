@@ -19,4 +19,4 @@
 - Shell completion generation (agentforge completion <shell>)
 - Config validation for model names, paths, MCP servers, hooks
 - Rich terminal UI with tool output visualization
-- Pip-installable package (agentforge on PyPI)
+- Pip-installable package metadata (`agentforge-harness` distribution with `agentforge` CLI)

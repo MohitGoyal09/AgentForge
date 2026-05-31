@@ -23,6 +23,23 @@ The main concepts explored here are:
 | Skills | How task-specific guidance can be loaded progressively without bloating context |
 | Persistence and replay | How snapshots, event logs, and checkpoints make sessions recoverable and debuggable |
 
+## Installation
+
+When published, install the package from PyPI:
+
+```bash
+pip install agentforge-harness
+agentforge init
+agentforge
+```
+
+For local development from this repository:
+
+```bash
+pip install -e ".[dev]"
+agentforge --version
+```
+
 ## Architecture
 
 ```mermaid
@@ -31,21 +48,21 @@ flowchart TB
     accDescr: The CLI sends user messages to the agent session. The session owns model access, context, tools, MCP clients, safety checks, hooks, and UI events.
 
     user["User"]
-    cli["CLI<br/>main.py"]
-    tui["Rich TUI<br/>ui/tui.py"]
-    agent["Agent Loop<br/>agent/agent.py"]
-    session["Session<br/>agent/session.py"]
-    context["Context Manager<br/>context/manager.py"]
-    prompts["Prompt Builder<br/>prompts/system.py"]
-    client["LLM Client<br/>client/llm_client.py"]
-    registry["Tool Registry<br/>tools/registry.py"]
-    tools["Built-in Tools<br/>tools/builtin"]
-    mcp["MCP Manager<br/>tools/mcp"]
-    approvals["Approval Manager<br/>safety/approval.py"]
-    hooks["Hook System<br/>hooks/hook_system.py"]
-    compaction["Chat Compactor<br/>context/compaction.py"]
-    persistence["Persistence Manager<br/>agent/persistence.py"]
-    subagents["Subagent Tools<br/>tools/subagents.py"]
+    cli["CLI<br/>agentforge_harness/cli"]
+    tui["Rich TUI<br/>agentforge_harness/ui/tui.py"]
+    agent["Agent Loop<br/>agentforge_harness/agent/agent.py"]
+    session["Session<br/>agentforge_harness/agent/session.py"]
+    context["Context Manager<br/>agentforge_harness/context/manager.py"]
+    prompts["Prompt Builder<br/>agentforge_harness/prompts/system.py"]
+    client["LLM Client<br/>agentforge_harness/client/llm_client.py"]
+    registry["Tool Registry<br/>agentforge_harness/tools/registry.py"]
+    tools["Built-in Tools<br/>agentforge_harness/tools/builtin"]
+    mcp["MCP Manager<br/>agentforge_harness/tools/mcp"]
+    approvals["Approval Manager<br/>agentforge_harness/safety/approval.py"]
+    hooks["Hook System<br/>agentforge_harness/hooks/hook_system.py"]
+    compaction["Chat Compactor<br/>agentforge_harness/context/compaction.py"]
+    persistence["Persistence Manager<br/>agentforge_harness/agent/persistence.py"]
+    subagents["Subagent Tools<br/>agentforge_harness/tools/subagents.py"]
 
     user --> cli
     cli --> agent
@@ -136,54 +153,35 @@ flowchart LR
 
 ```text
 agentforge/
-|-- main.py                    # CLI entry point and interactive commands
+|-- agentforge_harness/        # Importable Python package
+|   |-- agent/                 # Agent loop, events, persistence, and sessions
+|   |-- cli/                   # Click CLI and interactive commands
+|   |-- client/                # OpenAI-compatible LLM client
+|   |-- config/                # Pydantic config and loaders
+|   |-- context/               # Message history, compaction, loop detection
+|   |-- hooks/                 # Before/after agent/tool hooks
+|   |-- prompts/               # System prompt sections and compaction prompts
+|   |-- safety/                # Approval policies and circuit breaker
+|   |-- skills/                # Progressive skill discovery and loading
+|   |-- tools/                 # Built-in tools, registry, MCP, subagents
+|   |-- ui/                    # Rich terminal rendering
+|   `-- utils/                 # Path and text helpers
 |-- README.MD                  # Project documentation
-|-- requirements.txt           # Python dependencies
+|-- pyproject.toml             # Package metadata for agentforge-harness
+|-- requirements.txt           # Runtime dependency mirror
+|-- LICENSE                    # MIT license
 |-- .env.example               # Example API configuration
 |-- .agentforge/
 |   |-- config.toml            # Project-local config
 |   `-- tools/                 # Project-local dynamic tools
-|-- agent/
-|   |-- agent.py               # Core ReAct-style agent loop
-|   |-- events.py              # Agent lifecycle and streaming events
-|   |-- persistence.py         # Session snapshots, checkpoints, and event logs
-|   `-- session.py             # Session wiring for client, tools, context, hooks
-|-- client/
-|   |-- llm_client.py          # OpenAI-compatible streaming/non-streaming client
-|   `-- response.py            # StreamEvent, TokenUsage, ToolCall types
-|-- config/
-|   |-- config.py              # Pydantic config models
-|   `-- loader.py              # TOML and .env loading
-|-- context/
-|   |-- manager.py             # Message history, pruning, prompt assembly
-|   |-- compaction.py          # Summary-based context compaction
-|   `-- loop_detector.py       # Repeated action and cycle detection
-|-- hooks/
-|   `-- hook_system.py         # Before/after agent/tool hooks
-|-- prompts/
-|   `-- system.py              # System prompt sections and compaction prompts
-|-- safety/
-|   |-- approval.py            # Approval policy and command safety checks
-|   `-- circuit_breaker.py     # Per-model circuit breaker + fallback chain
-|-- tools/
-|   |-- base.py                # Tool, ToolResult, ToolConfirmation abstractions
-|   |-- registry.py            # Tool registration and invocation
-|   |-- discovery.py           # Dynamic .agentforge/tools discovery
-|   |-- subagents.py           # Subagent tool definitions
-|   |-- builtin/               # Built-in read/write/shell/search/memory tools
-|   `-- mcp/                   # MCP client, manager, and tool adapter
-|-- ui/
-|   `-- tui.py                 # Rich terminal rendering
-`-- utils/
-    |-- paths.py               # Path helpers and binary-file detection
-    `-- text.py                # Token counting and truncation
+`-- tests/                     # Pytest suite
 ```
 
 ## Core Design
 
 ### Agent Loop
 
-The agent loop in `agent/agent.py` is the heart of the harness.
+The agent loop in `agentforge_harness/agent/agent.py` is the heart of the harness.
 
 At a high level it:
 
@@ -199,7 +197,7 @@ This is a hybrid ReAct/function-calling loop: the model reasons in natural langu
 
 ### Session
 
-`agent/session.py` wires together the long-lived objects for one interactive run:
+`agentforge_harness/agent/session.py` wires together the long-lived objects for one interactive run:
 
 - `LLMClient`
 - `ToolRegistry`
@@ -216,7 +214,7 @@ The session owns snapshot creation and restoration. It captures conversation mes
 
 ### Tools
 
-Tools inherit from `Tool` in `tools/base.py`.
+Tools inherit from `Tool` in `agentforge_harness/tools/base.py`.
 
 Each tool provides:
 
@@ -274,7 +272,7 @@ This is one of the most important harness-learning upgrades because model recove
 
 ### Safety and Approval
 
-The approval layer in `safety/approval.py` classifies operations using:
+The approval layer in `agentforge_harness/safety/approval.py` classifies operations using:
 
 - tool mutability
 - command safety patterns
@@ -401,7 +399,7 @@ The context manager owns:
 - pruning old tool output
 - replacing old history with a compaction summary
 
-Compaction is handled by `context/compaction.py`, which asks the model to produce a continuation summary when context grows too large.
+Compaction is handled by `agentforge_harness/context/compaction.py`, which asks the model to produce a continuation summary when context grows too large.
 
 Future improvement: add explicit category budgets:
 
@@ -562,7 +560,7 @@ Automatic skill matching is intentionally conservative:
 
 ## Persistence, Checkpoints, and Replay
 
-AgentForge now has a first version of transcript persistence. The implementation lives in `agent/persistence.py` and is wired through `agent/session.py` and the interactive commands in `main.py`.
+AgentForge now has a first version of transcript persistence. The implementation lives in `agentforge_harness/agent/persistence.py` and is wired through `agentforge_harness/agent/session.py` and the interactive commands in `agentforge`.
 
 Persistence is split into three surfaces:
 
@@ -701,19 +699,19 @@ command = "python3 ./scripts/test_tool.py"
 Run a single prompt:
 
 ```bash
-python main.py "read main.py and explain the agent loop"
+agentforge run "read the current project and explain the agent loop"
 ```
 
 Start interactive mode:
 
 ```bash
-python main.py
+agentforge
 ```
 
 Use a different working directory:
 
 ```bash
-python main.py --cwd /path/to/project
+agentforge run --cwd /path/to/project
 ```
 
 Interactive commands:
@@ -760,19 +758,26 @@ Install dependencies:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[dev]"
+```
+
+Build the package locally:
+
+```bash
+python -m build
+python -m twine check dist/*
 ```
 
 Compile-check the codebase:
 
 ```bash
-python3 -m compileall -q agent client config context hooks prompts safety tools ui utils main.py scripts
+python3 -m compileall -q agentforge_harness tests main.py scripts
 ```
 
 Run a focused syntax check:
 
 ```bash
-python3 -m py_compile agent/agent.py tools/registry.py context/manager.py
+python3 -m py_compile agentforge_harness/agent/agent.py agentforge_harness/tools/registry.py agentforge_harness/context/manager.py
 ```
 
 Recommended future test layout:
@@ -801,7 +806,7 @@ Completed foundation:
 7. Add circuit breaker + fallback chain.
 8. Add context budget estimation.
 9. Add skill body token limit.
-10. Add eval harness scaffold (models, assertions, runner, scenarios).
+10. Package the project for local installation and future PyPI publishing.
 
 Recommended next implementation order:
 
@@ -844,11 +849,11 @@ Implemented:
 - Per-tool error isolation
 - Observation fields on all tools (summary, next_actions, artifacts, recovery_hint)
 - CLI commands: `new`, `reload`, `version`, `retry`, `history`, `report`, `export`, `todos --clear`, `config` pretty-print
-- Eval harness scaffold (models, assertions, runner, report, scenarios)
+- Package metadata for `agentforge-harness` with `agentforge` CLI entry point
 
 In progress or planned:
 
-- Eval harness: LLM judge, CI integration, mock mode
+- Eval harness: scenarios, mock mode, runner, LLM judge, CI integration
 - Cost tracking (`/cost`)
 - Secret scanning
 - Prompt injection test suite

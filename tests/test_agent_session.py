@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from config.config import Config
-from agent.session import Session
-from agent.modes import AgentMode
-from tools.base import ToolKind
+from agentforge_harness.config.config import Config
+from agentforge_harness.agent.session import Session
+from agentforge_harness.agent.modes import AgentMode
+from agentforge_harness.client.response import TokenUsage
+from agentforge_harness.agent.persistence import SessionSnapshot
+from agentforge_harness.tools.base import ToolKind
 
 
 class TestSessionBasics:
@@ -90,3 +92,55 @@ class TestSessionBasics:
         assert "subagent_explore" in tool_names
         assert "subagent_debugger" in tool_names
         assert "subagent_code_reviewer" in tool_names
+
+    def test_restore_snapshot_restores_mode(self):
+        config = Config(cwd=Path("/tmp"), model_name="test/test-model")
+        session = Session(config)
+        from agentforge_harness.context.manager import ContextManager
+
+        session.context_manager = ContextManager(
+            config=config,
+            tools=session.tool_registry.get_tools(mode=session.mode),
+            skills=[],
+            mode=session.mode,
+        )
+        snapshot = SessionSnapshot(
+            session_id="session_plan",
+            name="plan session",
+            created_at=session.created_at,
+            updated_at=session.updated_at,
+            turn_count=2,
+            cwd="/tmp",
+            config={},
+            messages=[],
+            latest_usage=TokenUsage(),
+            total_usage=TokenUsage(),
+            active_tools=[],
+            mcp_servers=[],
+            active_skills=[],
+            todos={},
+            mode="plan",
+        )
+
+        session.restore_snapshot(snapshot)
+
+        assert session.mode == AgentMode.PLAN
+        plan_tools = {tool.name for tool in session.tool_registry.get_tools(mode=session.mode)}
+        assert "write_file" not in plan_tools
+
+    def test_create_snapshot_defaults_to_current_mode(self):
+        config = Config(cwd=Path("/tmp"), model_name="test/test-model")
+        session = Session(config)
+        from agentforge_harness.context.manager import ContextManager
+
+        session.context_manager = ContextManager(
+            config=config,
+            tools=session.tool_registry.get_tools(mode=AgentMode.PLAN),
+            skills=[],
+            mode=AgentMode.PLAN,
+        )
+        session.mode = AgentMode.PLAN
+
+        snapshot = session.create_snapshot()
+
+        assert snapshot.mode == "plan"

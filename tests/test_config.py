@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 from pydantic_core import ValidationError
-from config.config import Config, ModelConfig
+from agentforge_harness.config.config import Config, ModelConfig
+from agentforge_harness.config.loader import _get_agent_md_files
 
 
 class TestConfigValidation:
@@ -87,3 +88,16 @@ class TestConfigAPIKey:
         cfg = Config(cwd=Path("/tmp"))
         cfg.model_name = "openai/gpt-4o"
         assert cfg.base_url == "https://api.example.com/v1"
+
+
+class TestAgentInstructions:
+    def test_agents_md_is_loaded(self, tmp_path: Path):
+        (tmp_path / "AGENTS.md").write_text("Use project instructions.", encoding="utf-8")
+
+        assert _get_agent_md_files(tmp_path) == "Use project instructions."
+
+    def test_agents_md_preferred_over_agent_md(self, tmp_path: Path):
+        (tmp_path / "AGENTS.md").write_text("plural", encoding="utf-8")
+        (tmp_path / "AGENT.MD").write_text("singular", encoding="utf-8")
+
+        assert _get_agent_md_files(tmp_path) == "plural"

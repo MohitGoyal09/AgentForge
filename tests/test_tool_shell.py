@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tools.base import ToolInvocation
+from agentforge_harness.tools.base import ToolInvocation
 
 
 class TestShellTool:
