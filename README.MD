@@ -2,7 +2,7 @@
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
-The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, output hygiene, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, JSON reports, HTML/markdown session export, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are browser-assisted local QA, deterministic replay, read-only swarm orchestration, and later a dedicated eval system.
+The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, output hygiene, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, JSON reports, HTML/markdown session export, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The v1 focus is packaging, docs, tool reliability, release hygiene, and a clear safety baseline. Larger learning milestones such as Skills v2, deterministic replay, local evals, browser QA, and swarm orchestration are planned after v1.
 
 ## Purpose
 
@@ -837,6 +837,8 @@ Extension examples:
 - [Extending AgentForge](docs/extensions.md)
 - [Provider setup](docs/providers.md)
 - [Security model](SECURITY.md)
+- [Tool reliability standard](docs/tool-reliability.md)
+- [Release checklist](docs/release.md)
 - [Examples index](examples/README.md)
 - [Custom tool example](examples/custom_tool.py)
 - [Skill example](examples/skills/api-interface-design/SKILL.md)
@@ -864,30 +866,17 @@ tests/
 
 ## Learning Roadmap
 
-Completed foundation:
+See [ROADMAP.md](ROADMAP.md) for the release roadmap. The short version:
 
-1. Stabilize current loop, hooks, tools, config, and TUI.
-2. Add transcript persistence.
-3. Integrate loop detector.
-4. Add session checkpoints.
-5. Add structured tool observations.
-6. Add plan/build modes.
-7. Add circuit breaker + fallback chain.
-8. Add context budget estimation.
-9. Add skill body token limit.
-10. Package the project for local installation and future PyPI publishing.
+- v1.0: stable learning harness with polished docs, reliable tools, release hygiene, and clear safety notes.
+- v1.1: Skills v2 with better ranking, validation, TUI explanations, and reference loading.
+- v1.2: deterministic replay and trace debugging.
+- v1.3: local evals.
+- v1.4: browser-assisted local QA.
+- v1.5: read-only swarm.
+- v2.0: isolated write-capable orchestration.
 
-Recommended next implementation order:
-
-1. Add prompt-injection origin tracking for high-risk follow-up tool calls.
-2. Add browser-assisted local QA.
-3. Add deterministic replay from event logs.
-4. Add web browser tool.
-5. Add git tools.
-6. Add read-only swarm mode.
-7. Add workspace rollback for checkpoints.
-8. Add write-capable swarm mode with file ownership.
-9. Add eval harness when you are ready to study evaluation design.
+Before v1, avoid adding large new systems. The release should first make the existing harness easier to install, understand, verify, and extend.
 
 ## Current Status
 

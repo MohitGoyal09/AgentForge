@@ -24,12 +24,14 @@
 
 ### Changed
 
-- Roadmap rewritten as an open-source release roadmap with pre-v1 quick wins and v1 release criteria.
+- Roadmap rewritten as an open-source release roadmap with v1 release criteria and post-v1 feature sequencing.
+- Roadmap polished into a release and feature-sequencing document without internal priority tables.
 - Package metadata now points to the Agentforge GitHub repository.
 - Setup now writes config and env files with private permissions and nudges users toward `agentforge doctor`.
 - HTML session export now includes summary cards, usage table, dark-mode styles, and collapsible transcript entries.
 - Tool errors now get a default recovery contract when a specific tool does not provide one.
 - Doctor now reports config permissions, `.env` permissions, tracked `.env` files, missing `.env` ignore rules, and out-of-workspace executable paths more explicitly.
+- Release smoke now removes old `dist/` artifacts and requires a fresh package build before `twine check`.
 
 ## 0.1.0 (2026-05-30)
 

@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import shutil
 from pathlib import Path
 
 
@@ -14,6 +15,7 @@ def main() -> int:
     default_env = os.environ.copy()
     isolated_env = os.environ.copy()
     isolated_env["HOME"] = str(Path(tempfile.gettempdir()) / "agentforge-release-smoke-home")
+    dist_dir = ROOT / "dist"
 
     commands = [
         (
@@ -40,16 +42,14 @@ def main() -> int:
         if result != 0:
             return result
 
+    if dist_dir.exists():
+        shutil.rmtree(dist_dir)
+
     build_result = _run([sys.executable, "-m", "build"], default_env, capture=True)
     dist_files = sorted(str(path) for path in (ROOT / "dist").glob("*"))
     if build_result != 0:
-        if not dist_files:
-            return build_result
-        print(
-            "Build failed, but existing dist artifacts were found. "
-            "Continuing with twine check for offline smoke validation.",
-            file=sys.stderr,
-        )
+        print("Fresh package build failed. Refusing to validate stale dist artifacts.", file=sys.stderr)
+        return build_result
 
     if not dist_files:
         print("No dist artifacts found after build", file=sys.stderr)

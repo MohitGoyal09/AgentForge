@@ -1,134 +1,118 @@
 # AgentForge Roadmap
 
-AgentForge is an open-source Python package for learning and experimenting with AI coding-agent harness engineering. This roadmap is intentionally release-oriented: it explains where the project is today, what must happen before v1, and which ideas are planned for later.
+AgentForge is an open-source Python package for learning AI coding-agent harness engineering by building the harness directly. The roadmap is intentionally release-oriented: it separates what must be stable for v1 from the larger research features that should come later.
 
-The project is still alpha. The goal for v1 is not to clone every commercial coding agent feature. The goal is a small, understandable, reliable harness that demonstrates the core systems clearly enough for developers to study, extend, and trust.
+The goal for v1 is not to clone every commercial coding agent. The goal is a compact, inspectable, installable harness that teaches the important systems clearly: model loops, tool calls, observations, approvals, context, skills, persistence, and recovery.
 
-## Current Status
+## Where AgentForge Is Today
 
-AgentForge already includes the main pieces of a coding-agent harness:
+AgentForge already has the foundation of a real coding-agent harness:
 
+- A streamed ReAct-style agent loop with typed tool calls.
+- Provider support for OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible endpoints.
+- Built-in tools for file IO, search, shell, web fetch/search, memory, todos, patching, git diff, and subagents.
+- Approval policies, path checks, shell safety checks, output hygiene, redaction, and prompt-injection boundaries around untrusted observations.
+- Context management with token estimation, pruning, compaction, and loop detection.
+- Progressive `SKILL.md` discovery and activation.
+- Plan/build modes with mode-aware tool filtering.
+- Sessions, checkpoints, event logs, resume/restore, markdown export, HTML export, and JSON reports.
+- A Rich terminal UI that shows model output, tool calls, approvals, skills, and status panels.
+- Package metadata for the `agentforge-harness` distribution and `agentforge` CLI.
 
-| Area            | Status                                                                                                                                                     |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Agent loop      | ReAct-style async loop with streamed events                                                                                                                |
-| Model providers | OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible endpoints                                                                                      |
-| Tools           | File tools, shell, search/fetch, todos, memory, patch, and subagents                                                                                       |
-| Safety          | Approval policies, path checks, shell safety rules, mutating-tool prompts, output hygiene, secret/param redaction, and untrusted tool-observation wrapping |
-| Context         | Token estimation, pruning, compression, and loop detection                                                                                                 |
-| Skills          | Progressive SKILL.md discovery and activation                                                                                                              |
-| Modes           | Plan and build modes with tool restrictions                                                                                                                |
-| Persistence     | Sessions, checkpoints, event logs, resume, and markdown export                                                                                             |
-| TUI             | Rich terminal UI with tool call rendering and status panels                                                                                                |
-| Packaging       | `agentforge-harness` package with `agentforge` CLI                                                                                                         |
+## v1.0: Stable Learning Harness
 
+v1 should be the first release that feels good to install, run, inspect, and extend. It should be stable enough for people learning harness engineering to trust the examples and copy the patterns.
 
-## Release Goals
+Before v1, focus on four areas.
 
-### v0.2.x - Alpha Stabilization
+### 1. Roadmap and Docs Polish
 
-Focus: make the current harness easier to install, configure, debug, and contribute to.
+The docs should explain the project as an open-source package, not as a private experiment.
 
-- Keep package metadata, README, changelog, and roadmap current.
-- Harden setup and config validation across supported providers.
-- Improve tool observations so every failure gives the model a useful retry path.
-- Add missing tests around safety, patching, setup, and provider adapters.
-- Reduce obvious TUI rendering issues and make command output easier to scan.
-- Document extension points for tools, skills, hooks, and subagents.
+- Keep the README focused on what AgentForge is, how to install it, how the architecture works, and where to go next.
+- Keep this roadmap focused on release direction and feature sequencing.
+- Keep provider setup, extension examples, security notes, and release steps in separate docs.
+- Make sure README, changelog, roadmap, package metadata, and examples agree with each other.
 
-### v0.3.x - Measurement and Safety
+### 2. Tool Reliability
 
-Focus: make harness changes measurable instead of vibe-based.
+Tools are the harness action space. For v1, every built-in tool should be predictable enough that the model can recover from ordinary failures.
 
-- Add regression tests for file edits, shell use, patching, skills, and plan/build mode.
-- Expand prompt-injection scenarios for shell output, web content, MCP responses, and multi-turn follow-up actions.
-- Track token usage and estimated cost per turn/session.
-- Save machine-readable session reports as artifacts that can be compared across runs.
+The v1 reliability bar:
 
-### v0.4.x - Daily Driver Tools
+- Tool schemas are explicit and narrow.
+- Tool outputs include a summary when useful.
+- Tool failures include a recovery hint and safe next action.
+- Mutating tools expose affected paths and diffs before approval when practical.
+- Observations are cleaned, capped, redacted, and marked as untrusted when needed.
+- Patch and edit tools handle common edge cases such as no trailing newline, missing parent directories, stale context, and path safety.
 
-Focus: make the tool useful for real coding workflows while keeping it inspectable.
+Good near-term work:
 
-- Add structured git tools for diff, status, commit preparation, and PR summaries.
-- Add browser automation for local web QA and visual verification.
-- Add HTML session export with collapsible tool calls.
-- Add `/review` to summarize changes made during a session.
-- Improve patch ergonomics with parent-directory creation, stronger path-security tests, and optional formatting hooks.
+- Audit every built-in tool for consistent `summary`, `artifacts`, `next_actions`, and `recovery_hint` behavior.
+- Add focused tests for confusing failure modes, especially patch, edit, shell, and file writes.
+- Keep `git_diff` read-only and use it as the preferred way to inspect repository changes.
+- Improve TUI rendering for long tool output, truncated observations, and failed tool calls.
 
-### v0.5.x - Orchestration
+### 3. Release Hygiene
 
-Focus: explore multi-agent coordination carefully, starting with low-risk workflows.
+v1 should be publishable without guesswork.
 
-- Add read-only swarm investigation mode.
-- Add structured subagent result objects instead of plain text only.
-- Add file/path scoping for child agents.
-- Add per-child timeouts, cancellation, and result aggregation.
-- Defer write-capable swarm mode until worktree isolation and merge safety are solid.
+The release path should include:
 
-### v1.0 - Stable Learning Harness
+- `agentforge init` works in a fresh directory.
+- `agentforge doctor` catches common config, provider, skill, MCP, and local trust problems.
+- `python3 -m pytest -q` passes with an isolated writable home directory.
+- `python3 -m compileall -q agentforge_harness tests main.py scripts` passes.
+- `python3 scripts/release_smoke.py` runs tests, doctor checks, a fresh package build, and `twine check`.
+- The built distribution contains docs and examples, but does not include tests, local config, caches, secrets, or development-only scripts.
+- The changelog has a single v1 section that names the important user-facing changes.
 
-Focus: a stable public release that users can install, understand, and extend.
+### 4. Safety Baseline
 
-v1 should include:
+AgentForge should be honest about what it protects and what it does not protect.
 
-- Reliable `pip install agentforge-harness` flow.
-- Clear `agentforge init` onboarding for all supported providers.
-- Stable config format with migration notes for breaking changes.
-- Documented tool, skill, hook, and subagent extension APIs.
-- Good default safety posture for shell, file writes, patches, and MCP servers.
-- Reproducible test, doctor, build, and release-smoke commands.
-- Security notes that are honest about what is protected and what is not.
-- Enough examples for a new contributor to build one tool, one skill, and one subagent.
+The v1 safety baseline:
 
-## Pre-v1 Quick Wins
+- Approval modes are documented and easy to understand.
+- Mutating tools ask for confirmation under the right policies.
+- Secrets are redacted from tool outputs, approval previews, hook params, TUI panels, persistence, and exports.
+- Tool observations are treated as data, not instructions.
+- Doctor warnings flag risky config permissions, committed `.env` files, unsafe MCP paths, and missing provider keys.
+- The docs clearly say that MCP servers, shell commands, and local tools are trusted code unless an external sandbox is added.
 
-These are small, high-leverage improvements pulled from the older internal PRD-style notes. They are good candidates before v1 because they improve trust, packaging quality, or day-to-day usability without requiring a large new architecture.
+## After v1: Feature Roadmap
 
+These features are important, but they should not block the first stable learning release.
 
-| Priority | Status   | Quick win                                                                  | Why it matters                                                                                                    |
-| -------- | -------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| P0       | Done     | Add a smoke test for `agentforge init` output                              | Prevents broken first-run config files.                                                                           |
-| P0       | Done     | Add provider adapter tests for OpenAI-compatible and Anthropic tool calls  | Keeps multi-provider support from silently regressing.                                                            |
-| P0       | Done     | Add secret redaction for tool outputs                                      | Stops obvious key leaks from entering model context or logs.                                                      |
-| P0       | Done     | Add prompt-injection fixture tests and untrusted tool-observation wrapping | Tests the most important safety boundary for coding agents.                                                       |
-| P0       | Done     | Add approval prompt and tool-param redaction                               | Keeps secrets out of approval previews, TUI argument panels, and hook params.                                     |
-| P0       | Done     | Add central output cleanup for control characters and large outputs        | Prevents terminal escape noise and oversized observations from leaking across model, hooks, TUI, and persistence. |
-| P0       | Done     | Add `agentforge doctor` health checks                                      | Helps users diagnose config, provider keys, skill roots, MCP commands, and safety flags before runtime.           |
-| P1       | Deferred | Add `/cost` using token usage already collected                            | Useful later, but not needed for the current v1 polish pass.                                                      |
-| P1       | Done     | Add structured `git_diff` read-only tool                                   | Safer and more useful than asking the model to parse raw shell output.                                            |
-| P1       | Done     | Improve patch tests around symlinks, parent dirs, and no-newline files     | Patch is powerful, so confidence here matters.                                                                    |
-| P1       | Done     | Add `--json` output for `/stats` or a new report command                   | Helps automation and future eval tooling.                                                                         |
-| P1       | Done     | Add a minimal `CONTRIBUTING.md`                                            | Makes the project feel like an open-source package, not a private experiment.                                     |
-| P1       | Done     | Add issue templates for bug reports and feature requests                   | Makes outside feedback easier to act on.                                                                          |
-| P2       | Done     | Add HTML session export                                                    | Useful, but not required for the core harness.                                                                    |
-| P2       | Open     | Add browser tool for local QA                                              | Valuable, but it brings dependency and sandboxing complexity.                                                     |
+### v1.1: Skills v2
 
+Skills are one of the clearest ways to teach progressive disclosure. v1.1 should make them more precise, more explainable, and easier to share.
 
-Recommended order before v1:
+Planned work:
 
-1. Finish first-run onboarding polish.
-2. Expand doctor warnings for local trust boundaries.
-3. Keep tool observations consistent across failures.
-4. Consider deterministic replay once reports and exports are stable.
+- Better skill ranking without hardcoded task rules.
+- Aliases, categories, and display names.
+- `agentforge skills validate` for checking frontmatter, paths, and oversized bodies.
+- Token budgets per skill and clearer truncation behavior.
+- TUI explanations for why a skill matched and what content was loaded.
+- Lazy loading for skill references, assets, and scripts.
+- Skill install/list/update flows for local and global skill roots.
 
-## Security Roadmap
+### v1.2: Replay and Trace Debugging
 
-Security work should land in layers. AgentForge should be honest about its protections instead of pretending the harness is sandboxed when it is not.
+Replay is the bridge between "the agent did something" and "I can understand why it happened."
 
+Planned work:
 
-| Layer            | Planned work                                                                                                    |
-| ---------------- | --------------------------------------------------------------------------------------------------------------- |
-| Output hygiene   | Secret/param redaction, control-character stripping, and central output caps are in place                       |
-| Prompt injection | Basic untrusted wrapping is in place; add origin tracking for high-risk follow-up actions                       |
-| Shell safety     | Expand obfuscation detection and add stricter allowlist mode                                                    |
-| Config safety    | Warns on risky config/env file permissions and committed `.env` files; keep expanding path and MCP trust checks |
-| MCP safety       | Document that MCP servers are trusted code until sandboxing exists                                              |
-| Sandboxing       | Explore OS-level isolation after the core harness stabilizes                                                    |
+- Deterministic replay from event logs without model calls.
+- Trace inspection for model messages, tool calls, approvals, and observations.
+- Regression comparison between two runs.
+- Better session reports for debugging failed tasks.
 
+### v1.3: Local Evals
 
-## Post-v1 Eval Roadmap
-
-The eval system should start later, after the v1 package surface is stable.
+Evals should come after replay, because replay gives the project a clean source of truth for what happened.
 
 Initial eval scenarios:
 
@@ -148,41 +132,65 @@ Initial metrics:
 - Turns per task.
 - Tool errors per task.
 - Token usage per task.
-- Cost estimate per task.
+- Estimated cost per task.
 
 Later eval work can add LLM-as-judge scoring, model comparisons, and baseline diffing.
 
-## Multi-Agent Roadmap
+### v1.4: Browser-Assisted Local QA
 
-Subagents and swarm mode should stay separate concepts:
+Browser QA makes AgentForge more useful for frontend work while teaching a major harness pattern: observing the environment, not only files.
 
-- Subagents are specialist calls: one bounded task, one result, parent remains in control.
-- Swarm mode is orchestration: multiple child agents, parallel work, aggregation, and eventually conflict handling.
+Planned work:
 
-Planned order:
+- Open localhost targets.
+- Capture screenshots.
+- Read console errors and network failures.
+- Produce a small QA report.
+- Keep browser tools optional so the base package stays lightweight.
 
-1. Improve built-in subagents and structured result output.
-2. Add read-only swarm investigation.
-3. Add scoped child-agent workspaces.
-4. Add worktree-based write isolation.
-5. Add merge/conflict handling only after read-only swarm is reliable.
+### v1.5: Read-Only Swarm
 
-## Not Planned for v1
+Subagents and swarm mode should stay separate concepts.
 
-These are useful ideas, but they should not block v1:
+- Subagents are specialist tool calls: one bounded task, one result, parent remains in control.
+- Swarm mode is orchestration: multiple child agents, shared task state, aggregation, budgets, and eventually conflict handling.
 
-- Write-capable swarm mode.
-- Full browser automation.
-- OS-level sandboxing.
-- LLM judge evals.
-- Hosted service or cloud sync.
+Read-only swarm should come first:
+
+- Investigation swarm for codebase exploration.
+- Role-specific child agents such as explorer, reviewer, debugger, and test planner.
+- Per-child timeout and budget controls.
+- Structured result aggregation.
+- No file writes until isolation and merge safety exist.
+
+### v2.0: Isolated Write-Capable Orchestration
+
+Write-capable swarm mode should be treated as a bigger release because it needs real isolation.
+
+Prerequisites:
+
+- Workspace rollback for checkpoints.
+- Worktree-based child-agent isolation.
+- File ownership and conflict detection.
+- Merge planning and review.
+- Cancellation and cleanup for child agents.
+- Stronger replay/debug support for multi-agent runs.
+
+## Later Ideas
+
+These are useful, but they should stay behind the core learning path:
+
+- Cost tracking and `/cost`.
+- Structured git status, commit preparation, and PR summary tools.
+- Secret scanning for workspace files.
+- OS-level sandboxing research.
 - Plugin marketplace.
-- Multi-user collaboration.
+- Hosted sync or multi-user collaboration.
 - Enterprise policy management.
 
 ## Contribution Areas
 
-Good first contribution areas:
+Good first contributions:
 
 - Tests for existing tools.
 - Documentation examples.
@@ -191,11 +199,11 @@ Good first contribution areas:
 - Safer tool output formatting.
 - Config validation improvements.
 
-Larger contribution areas:
+Larger contributions:
 
-- Eval runner.
-- Secret scanning.
-- Structured git tools.
-- Browser tool.
+- Skills v2.
+- Deterministic replay.
+- Local eval runner.
+- Browser QA tool.
 - Read-only swarm mode.
 - Sandboxing research.
