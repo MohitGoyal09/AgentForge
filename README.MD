@@ -2,7 +2,7 @@
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
-The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are cost tracking, a web browser tool, deterministic replay, and read-only swarm orchestration.
+The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, output hygiene, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are cost tracking, a web browser tool, deterministic replay, and read-only swarm orchestration.
 
 ## Purpose
 
@@ -278,6 +278,8 @@ This is one of the most important harness-learning upgrades because model recove
 Tool outputs pass through centralized secret redaction in `agentforge_harness/utils/redaction.py` before after-tool hooks, model context, TUI events, persistence, and exports see the result. Tool-call arguments are also redacted before TUI display and hook environment variables, and approval confirmations redact commands, params, and diff previews before asking the user. Redaction is enabled by default and records non-secret metadata such as redaction count and detected secret kinds.
 
 Current redaction coverage includes common OpenAI/OpenRouter/Anthropic API key shapes, GitHub tokens, JWTs, private key blocks, and generic `API_KEY`/`TOKEN`/`SECRET`/`PASSWORD` assignments. This protects obvious leaks in observations, but it is not a sandbox and does not make arbitrary tools or MCP servers safe.
+
+Before redaction, tool results pass through output hygiene in `agentforge_harness/safety/output_hygiene.py`. This strips ANSI escape sequences and unsafe control characters while preserving normal whitespace, then truncates large model-visible fields according to `max_tool_output_tokens`. Hygiene metadata records how many terminal sequences or control characters were removed and which fields were truncated.
 
 Tool observations also pass through prompt-injection boundary handling in `agentforge_harness/safety/prompt_injection.py`. When enabled, tool results carry trust metadata and model-visible observations are wrapped in `<untrusted_content>` tags. The wrapper tells the model that file contents, command output, web pages, MCP responses, and other tool observations are data, not instructions. This reduces accidental instruction promotion while keeping the original TUI output readable.
 
@@ -689,6 +691,7 @@ Example `.agentforge/config.toml`:
 hooks_enabled = true
 approval = "on-request"
 max_turns = 100
+output_hygiene_enabled = true
 redaction_enabled = true
 prompt_injection_protection_enabled = true
 skills_enabled = true
@@ -843,7 +846,7 @@ Recommended next implementation order:
 
 1. Add eval harness (LLM judge, CI integration, diff mode).
 2. Add cost tracking (`/cost` command).
-3. Add control-character stripping and central output cleanup.
+3. Add automation-friendly JSON reporting.
 4. Add prompt-injection origin tracking for high-risk follow-up tool calls.
 5. Add web browser tool.
 6. Add git tools.

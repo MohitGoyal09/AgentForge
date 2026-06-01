@@ -4,6 +4,7 @@ from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.config.config import Config
 from agentforge_harness.hooks.hook_system import HookSystem
 from agentforge_harness.safety.approval import ApprovalContext, ApprovalDecision, ApprovalManager
+from agentforge_harness.safety.output_hygiene import clean_tool_result
 from agentforge_harness.safety.prompt_injection import mark_tool_result_untrusted
 from agentforge_harness.tools.base import Tool, ToolInvocation, ToolResult, ToolKind
 from agentforge_harness.utils.redaction import redact_tool_result
@@ -77,6 +78,12 @@ class ToolRegistry:
         result: ToolResult,
         tool: Tool | None = None,
     ) -> ToolResult:
+        if self.config.output_hygiene_enabled:
+            result = clean_tool_result(
+                result,
+                model_name=self.config.model_name,
+                max_output_tokens=self.config.max_tool_output_tokens,
+            )
         if self.config.redaction_enabled:
             result = redact_tool_result(result)
         if self.config.prompt_injection_protection_enabled and tool is not None:

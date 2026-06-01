@@ -132,6 +132,7 @@ class Config(BaseModel):
     approval: ApprovalPolicy = ApprovalPolicy.ON_REQUEST
     max_turns : int = 100
     max_tool_output_tokens : int = 50_000
+    output_hygiene_enabled: bool = True
     redaction_enabled: bool = True
     prompt_injection_protection_enabled: bool = True
 

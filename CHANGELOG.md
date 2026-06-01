@@ -11,6 +11,7 @@
 - Read-only `git_diff` tool for structured repository diff inspection.
 - `CONTRIBUTING.md` and GitHub issue templates for open-source contributors.
 - Patch tool intent metadata, parent-directory policy, deletion fallback handling, and edge-case tests.
+- Central output hygiene for tool results, including ANSI/control-character stripping and model-visible field caps.
 - Centralized secret redaction for tool results before they reach model context, hooks, TUI events, persistence, or exports.
 - Approval confirmation, TUI argument, and hook parameter redaction for tool inputs.
 - Prompt-injection boundary handling that marks tool observations as untrusted data and wraps model-visible tool output.
