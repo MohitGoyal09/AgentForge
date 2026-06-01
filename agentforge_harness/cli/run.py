@@ -3,8 +3,10 @@ import sys
 import click
 from pathlib import Path
 from importlib.metadata import version, PackageNotFoundError
+from agentforge_harness.agent.persistence import PersistenceManager
 from agentforge_harness.cli.commands import CLI
 from agentforge_harness.cli.doctor import build_doctor_report, print_doctor_report
+from agentforge_harness.cli.report import build_session_report, format_session_report, report_to_json
 from agentforge_harness.cli.setup import run_setup
 from agentforge_harness.config.loader import load_config
 from agentforge_harness.ui.tui import get_console
@@ -67,6 +69,43 @@ def doctor(cwd: Path | None, json_output: bool) -> None:
     report = build_doctor_report(config)
     print_doctor_report(report, console=console, json_output=json_output)
     sys.exit(1 if report.has_errors else 0)
+
+
+@cli.command()
+@click.option("--session-id", help="Session id to report. Defaults to latest session.")
+@click.option("--json", "json_output", is_flag=True, help="Print machine-readable JSON.")
+@click.option(
+    "--data-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    help="AgentForge data directory. Defaults to the platform data dir.",
+)
+def report(session_id: str | None, json_output: bool, data_dir: Path | None) -> None:
+    """Print a saved session report without calling a model."""
+    persistence = PersistenceManager(data_dir=data_dir)
+
+    target_session_id = session_id
+    if target_session_id is None:
+        sessions = persistence.list_sessions()
+        if not sessions:
+            console.print("[error]No saved sessions found.[/error]")
+            sys.exit(1)
+        target_session_id = sessions[0]["session_id"]
+
+    try:
+        snapshot = persistence.load_session(target_session_id)
+    except ValueError as exc:
+        console.print(f"[error]{exc}[/error]")
+        sys.exit(1)
+
+    if snapshot is None:
+        console.print(f"[error]Session not found: {target_session_id}[/error]")
+        sys.exit(1)
+
+    payload = build_session_report(snapshot)
+    if json_output:
+        console.file.write(report_to_json(payload))
+    else:
+        console.print(format_session_report(payload))
 
 
 @cli.command()

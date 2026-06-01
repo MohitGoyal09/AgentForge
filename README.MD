@@ -2,7 +2,7 @@
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
-The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, output hygiene, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are cost tracking, a web browser tool, deterministic replay, and read-only swarm orchestration.
+The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, output hygiene, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, JSON reports, HTML/markdown session export, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are evals, browser-assisted local QA, deterministic replay, and read-only swarm orchestration.
 
 ## Purpose
 
@@ -757,6 +757,14 @@ agentforge doctor
 agentforge doctor --json
 ```
 
+Print the latest saved session report without starting the agent:
+
+```bash
+agentforge report
+agentforge report --json
+agentforge report --session-id <session_id>
+```
+
 Interactive commands:
 
 | Command | Status | Purpose |
@@ -768,7 +776,7 @@ Interactive commands:
 | `/version` | implemented | Show AgentForge version |
 | `/retry` | implemented | Resend the last user message |
 | `/history [n]` | implemented | Show last N messages (default 10) |
-| `/report` | implemented | Show session summary report |
+| `/report` | implemented | Show session summary report (`/report --json` for machine-readable output) |
 | `/clear` | implemented | Clear conversation history |
 | `/config` | implemented | Show configuration (Rich Table) |
 | `/doctor` | implemented | Check config, provider keys, skill roots, MCP commands, and safety flags |
@@ -791,7 +799,7 @@ Interactive commands:
 | `/resume <session_id>` | implemented | Resume saved session |
 | `/plan` | implemented | Switch to plan mode (read-only tools) |
 | `/build` | implemented | Switch to build mode (all tools) |
-| `/export` | implemented | Export session as markdown |
+| `/export` | implemented | Export session as markdown or HTML (`/export html`) |
 | `/stats` | implemented | Show session statistics |
 | `/swarm` | planned | Run swarm orchestration |
 
@@ -824,6 +832,14 @@ Run a focused syntax check:
 python3 -m py_compile agentforge_harness/agent/agent.py agentforge_harness/tools/registry.py agentforge_harness/context/manager.py
 ```
 
+Extension examples:
+
+- [Extending AgentForge](docs/extensions.md)
+- [Custom tool example](examples/custom_tool.py)
+- [Skill example](examples/skills/api-interface-design/SKILL.md)
+- [Hook example](examples/hooks/log_tool_call.py)
+- [Subagent example](examples/subagents/code-review.toml)
+
 Recommended future test layout:
 
 ```text
@@ -855,9 +871,9 @@ Completed foundation:
 Recommended next implementation order:
 
 1. Add eval harness (LLM judge, CI integration, diff mode).
-2. Add cost tracking (`/cost` command).
-3. Add automation-friendly JSON reporting.
-4. Add prompt-injection origin tracking for high-risk follow-up tool calls.
+2. Add prompt-injection origin tracking for high-risk follow-up tool calls.
+3. Add browser-assisted local QA.
+4. Add deterministic replay.
 5. Add web browser tool.
 6. Add git tools.
 7. Add deterministic replay from event logs.

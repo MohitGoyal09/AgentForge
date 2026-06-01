@@ -1,6 +1,8 @@
 include LICENSE
 include README.MD
 include pyproject.toml
+recursive-include docs *.md
+recursive-include examples *.py *.md *.toml
 prune tests
 prune scripts
 prune .agentforge

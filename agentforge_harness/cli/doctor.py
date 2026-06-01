@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import stat
+import subprocess
 from dataclasses import asdict, dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -52,6 +55,7 @@ def build_doctor_report(config: Config) -> DoctorReport:
     checks.extend(_check_config(config))
     checks.extend(_check_provider(config))
     checks.extend(_check_cwd(config))
+    checks.extend(_check_workspace_paths(config))
     checks.extend(_check_data_dir())
     checks.extend(_check_skills(config))
     checks.extend(_check_mcp(config))
@@ -234,6 +238,63 @@ def _check_cwd(config: Config) -> list[DoctorCheck]:
     ]
 
 
+def _check_workspace_paths(config: Config) -> list[DoctorCheck]:
+    checks: list[DoctorCheck] = []
+    root = config.cwd.resolve()
+
+    for name, server in config.mcp_servers.items():
+        if not server.cwd:
+            continue
+        resolved = server.cwd.expanduser()
+        if not resolved.is_absolute():
+            resolved = root / resolved
+        try:
+            resolved = resolved.resolve()
+        except OSError:
+            continue
+        if not _is_relative_to(resolved, root):
+            checks.append(
+                DoctorCheck(
+                    name=f"paths.mcp.{name}",
+                    status="warn",
+                    message="MCP server cwd is outside the workspace",
+                    detail=str(resolved),
+                )
+            )
+
+    for hook in config.hooks:
+        if not hook.enabled or not hook.script:
+            continue
+        path = Path(hook.script).expanduser()
+        if not path.is_absolute():
+            path = root / path
+        try:
+            path = path.resolve()
+        except OSError:
+            continue
+        if not _is_relative_to(path, root):
+            checks.append(
+                DoctorCheck(
+                    name=f"paths.hook.{hook.name}",
+                    status="warn",
+                    message="Hook script is outside the workspace",
+                    detail=str(path),
+                )
+            )
+
+    if checks:
+        return checks
+
+    return [
+        DoctorCheck(
+            name="paths.workspace",
+            status="ok",
+            message="Configured workspace paths look scoped",
+            detail=str(root),
+        )
+    ]
+
+
 def _check_data_dir() -> list[DoctorCheck]:
     data_dir = get_data_dir()
     probe = data_dir / ".doctor-write-test"
@@ -392,13 +453,96 @@ def _check_safety(config: Config) -> list[DoctorCheck]:
 
     env_path = config.cwd / ".env"
     if env_path.exists():
+        checks.extend(_check_env_file(env_path, config.cwd))
+    else:
         checks.append(
             DoctorCheck(
                 name="safety.env",
-                status="warn",
-                message=".env file exists in workspace",
-                detail="Ensure it is not committed and permissions are appropriate",
+                status="ok",
+                message="No workspace .env file found",
+                detail="Provider keys can also live in the user config directory",
             )
         )
 
     return checks
+
+
+def _check_env_file(env_path: Path, cwd: Path) -> list[DoctorCheck]:
+    checks: list[DoctorCheck] = []
+    try:
+        mode = stat.S_IMODE(env_path.stat().st_mode)
+    except OSError as exc:
+        return [
+            DoctorCheck(
+                name="safety.env",
+                status="warn",
+                message="Could not inspect workspace .env",
+                detail=str(exc),
+            )
+        ]
+
+    if mode & (stat.S_IRWXG | stat.S_IRWXO):
+        checks.append(
+            DoctorCheck(
+                name="safety.env.permissions",
+                status="warn",
+                message=".env is readable or writable by group/other users",
+                detail=f"mode={oct(mode)}; recommended=0o600",
+            )
+        )
+    else:
+        checks.append(
+            DoctorCheck(
+                name="safety.env.permissions",
+                status="ok",
+                message=".env permissions are private",
+                detail=f"mode={oct(mode)}",
+            )
+        )
+
+    if _is_git_tracked(env_path, cwd):
+        checks.append(
+            DoctorCheck(
+                name="safety.env.git",
+                status="error",
+                message=".env appears to be tracked by git",
+                detail="Remove it from git history/index and rotate exposed keys",
+            )
+        )
+    else:
+        checks.append(
+            DoctorCheck(
+                name="safety.env.git",
+                status="ok",
+                message=".env is not tracked by git",
+                detail=str(env_path),
+            )
+        )
+
+    return checks
+
+
+def _is_git_tracked(path: Path, cwd: Path) -> bool:
+    if not (cwd / ".git").exists():
+        return False
+    try:
+        relative = os.path.relpath(path.resolve(), cwd.resolve())
+    except ValueError:
+        return False
+    result = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", relative],
+        cwd=cwd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False

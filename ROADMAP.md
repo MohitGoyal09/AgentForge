@@ -92,21 +92,21 @@ These are small, high-leverage improvements pulled from the older internal PRD-s
 | P0 | Done | Add approval prompt and tool-param redaction | Keeps secrets out of approval previews, TUI argument panels, and hook params. |
 | P0 | Done | Add central output cleanup for control characters and large outputs | Prevents terminal escape noise and oversized observations from leaking across model, hooks, TUI, and persistence. |
 | P0 | Done | Add `agentforge doctor` health checks | Helps users diagnose config, provider keys, skill roots, MCP commands, and safety flags before runtime. |
-| P1 | Open | Add `/cost` using token usage already collected | Turns existing telemetry into useful feedback. |
+| P1 | Deferred | Add `/cost` using token usage already collected | Useful later, but not needed for the current v1 polish pass. |
 | P1 | Done | Add structured `git_diff` read-only tool | Safer and more useful than asking the model to parse raw shell output. |
 | P1 | Done | Improve patch tests around symlinks, parent dirs, and no-newline files | Patch is powerful, so confidence here matters. |
-| P1 | Open | Add `--json` output for `/stats` or a new report command | Helps automation and future eval tooling. |
+| P1 | Done | Add `--json` output for `/stats` or a new report command | Helps automation and future eval tooling. |
 | P1 | Done | Add a minimal `CONTRIBUTING.md` | Makes the project feel like an open-source package, not a private experiment. |
 | P1 | Done | Add issue templates for bug reports and feature requests | Makes outside feedback easier to act on. |
-| P2 | Open | Add HTML session export | Useful, but not required for the core harness. |
+| P2 | Done | Add HTML session export | Useful, but not required for the core harness. |
 | P2 | Open | Add browser tool for local QA | Valuable, but it brings dependency and sandboxing complexity. |
 
 Recommended order before v1:
 
-1. `/cost` command from existing token usage.
-2. Add automation-friendly JSON reporting.
-3. Expand config safety warnings for risky files and MCP trust boundaries.
-4. Consider HTML session export once the core safety work is stronger.
+1. Add a small eval runner with local mock scenarios.
+2. Expand prompt-injection origin tracking for high-risk follow-up actions.
+3. Add browser-assisted local QA.
+4. Consider deterministic replay once reports and exports are stable.
 
 ## Security Roadmap
 
@@ -117,7 +117,7 @@ Security work should land in layers. AgentForge should be honest about its prote
 | Output hygiene | Secret/param redaction, control-character stripping, and central output caps are in place |
 | Prompt injection | Basic untrusted wrapping is in place; add origin tracking for high-risk follow-up actions |
 | Shell safety | Expand obfuscation detection and add stricter allowlist mode |
-| Config safety | Warn on risky config/env file permissions and committed `.env` files |
+| Config safety | Warns on risky config/env file permissions and committed `.env` files; keep expanding path and MCP trust checks |
 | MCP safety | Document that MCP servers are trusted code until sandboxing exists |
 | Sandboxing | Explore OS-level isolation after the core harness stabilizes |
 

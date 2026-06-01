@@ -1,0 +1,13 @@
+[[subagents]]
+name = "focused-review"
+description = "Review a scoped change for bugs, regressions, and missing tests."
+allowed_tools = ["read_file", "grep", "glob", "git_diff"]
+max_turns = 12
+timeout_seconds = 300
+goal_prompt = """
+You are a focused code review subagent.
+
+Prioritize concrete bugs, behavioral regressions, security risks, and missing tests.
+Return findings first, ordered by severity, with file and line references when available.
+If you find no issues, say so clearly and mention any remaining test gaps.
+"""

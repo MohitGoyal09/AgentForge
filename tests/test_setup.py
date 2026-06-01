@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import stat
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -10,7 +11,7 @@ except ModuleNotFoundError:
     import tomli as tomllib
 
 from agentforge_harness.cli.run import cli
-from agentforge_harness.cli.setup import _write_config_file
+from agentforge_harness.cli.setup import _write_config_file, _write_env_file
 
 
 def test_setup_config_writes_top_level_approval(tmp_path: Path):
@@ -30,6 +31,21 @@ def test_setup_config_writes_top_level_approval(tmp_path: Path):
         "provider": "openai",
         "name": "gpt-4o-mini",
     }
+    assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
+
+
+def test_setup_env_file_is_private(tmp_path: Path):
+    env_path = tmp_path / ".env"
+
+    _write_env_file(
+        env_path=env_path,
+        provider="openai",
+        api_key="sk-test",
+        base_url="",
+    )
+
+    assert "OPENAI_API_KEY=sk-test" in env_path.read_text(encoding="utf-8")
+    assert stat.S_IMODE(env_path.stat().st_mode) == 0o600
 
 
 def test_setup_config_writes_custom_base_url(tmp_path: Path):

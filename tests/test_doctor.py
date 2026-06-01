@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import os
+import subprocess
 
 from click.testing import CliRunner
 
@@ -92,6 +94,64 @@ def test_doctor_warns_for_risky_safety_settings(monkeypatch, tmp_path: Path):
     assert statuses["safety.redaction"] == "warn"
     assert statuses["safety.output_hygiene"] == "warn"
     assert statuses["safety.prompt_injection"] == "warn"
+
+
+def test_doctor_warns_for_permissive_workspace_env(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    env_path = tmp_path / ".env"
+    env_path.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    os.chmod(env_path, 0o644)
+
+    config = Config(
+        cwd=tmp_path,
+        model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o-mini"),
+    )
+
+    statuses = _statuses(build_doctor_report(config))
+
+    assert statuses["safety.env.permissions"] == "warn"
+    assert statuses["safety.env.git"] == "ok"
+
+
+def test_doctor_errors_when_workspace_env_is_tracked(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.DEVNULL)
+    env_path = tmp_path / ".env"
+    env_path.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    os.chmod(env_path, 0o600)
+    subprocess.run(["git", "add", ".env"], cwd=tmp_path, check=True, stdout=subprocess.DEVNULL)
+
+    config = Config(
+        cwd=tmp_path,
+        model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o-mini"),
+    )
+
+    report = build_doctor_report(config)
+    statuses = _statuses(report)
+
+    assert report.has_errors
+    assert statuses["safety.env.permissions"] == "ok"
+    assert statuses["safety.env.git"] == "error"
+
+
+def test_doctor_warns_for_mcp_cwd_outside_workspace(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    outside = tmp_path.parent / "outside-mcp"
+    outside.mkdir(exist_ok=True)
+    config = Config(
+        cwd=tmp_path,
+        model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o-mini"),
+        mcp_servers={
+            "outside": MCPServerConfig(command="python3", cwd=outside),
+        },
+    )
+
+    statuses = _statuses(build_doctor_report(config))
+
+    assert statuses["paths.mcp.outside"] == "warn"
 
 
 def test_agentforge_doctor_cli_json_smoke(monkeypatch, tmp_path: Path):

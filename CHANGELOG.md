@@ -10,6 +10,9 @@
 - Provider and setup tests covering config resolution, Anthropic conversion, and generated TOML shape.
 - Read-only `git_diff` tool for structured repository diff inspection.
 - `agentforge doctor` and `/doctor` health checks with optional JSON output.
+- `agentforge report` command and `/report --json` for saved-session reporting without model calls.
+- HTML session export with `/export html`.
+- Extension docs and examples for custom tools, skills, hooks, and subagents.
 - `CONTRIBUTING.md` and GitHub issue templates for open-source contributors.
 - Patch tool intent metadata, parent-directory policy, deletion fallback handling, and edge-case tests.
 - Central output hygiene for tool results, including ANSI/control-character stripping and model-visible field caps.
@@ -21,6 +24,9 @@
 
 - Roadmap rewritten as an open-source release roadmap with pre-v1 quick wins and v1 release criteria.
 - Package metadata now points to the Agentforge GitHub repository.
+- Setup now writes config and env files with private permissions and nudges users toward `agentforge doctor`.
+- Tool errors now get a default recovery contract when a specific tool does not provide one.
+- Doctor now reports `.env` permissions, tracked `.env` files, and out-of-workspace executable paths more explicitly.
 
 ## 0.1.0 (2026-05-30)
 

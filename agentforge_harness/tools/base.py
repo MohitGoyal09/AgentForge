@@ -83,6 +83,15 @@ class ToolResult(BaseModel):
 
     @classmethod
     def error_result(cls, error: str, output: str = "", **kwargs: Any):
+        kwargs.setdefault("summary", error)
+        kwargs.setdefault(
+            "recovery_hint",
+            "Inspect the current state, correct the tool input or surrounding context, and retry only if the action is still safe.",
+        )
+        kwargs.setdefault(
+            "next_actions",
+            ["Re-read or inspect the relevant state before retrying this tool."],
+        )
         return cls(success=False, status="error", output=output, error=error, **kwargs)
 
     @classmethod

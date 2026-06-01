@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.panel import Panel
@@ -42,6 +43,7 @@ def _write_env_file(env_path: Path, provider: str, api_key: str, base_url: str) 
         "",
     ])
     env_path.write_text("\n".join(lines), encoding="utf-8")
+    os.chmod(env_path, 0o600)
 
 
 def _write_config_file(config_path: Path, provider: str, model: str, base_url: str) -> None:
@@ -57,6 +59,7 @@ def _write_config_file(config_path: Path, provider: str, model: str, base_url: s
         lines.append(f'base_url = "{base_url}"')
     lines.append("")
     config_path.write_text("\n".join(lines), encoding="utf-8")
+    os.chmod(config_path, 0o600)
 
 
 def run_setup() -> bool:
@@ -70,13 +73,15 @@ def run_setup() -> bool:
             Text(
                 "Welcome to AgentForge!\n\n"
                 "You need an API key to use LLM-powered features.\n"
-                "OpenRouter is the default because it can route to many models,\n"
-                "but you can also configure OpenAI, Anthropic, or any\n"
-                "OpenAI-compatible endpoint.\n\n"
+                "Choose the provider you want the harness to call. OpenRouter\n"
+                "is the default because it can route to many models, OpenAI\n"
+                "and Anthropic use their native SDK paths, and custom means an\n"
+                "OpenAI-compatible endpoint such as a local server.\n\n"
                 "Provider keys:\n"
                 "- OpenRouter: https://openrouter.ai/keys\n"
                 "- OpenAI: https://platform.openai.com/api-keys\n"
-                "- Anthropic: https://console.anthropic.com/settings/keys",
+                "- Anthropic: https://console.anthropic.com/settings/keys\n\n"
+                "Secrets are written with private file permissions.",
                 style="code",
             ),
             title=Text("Setup", style="bold cyan"),
@@ -120,7 +125,8 @@ def run_setup() -> bool:
                 f"Base URL: {base_url or 'provider default'}\n"
                 f"Model: {model}\n\n"
                 "You can change these later by editing the file above,\n"
-                "setting environment variables, or running [bold]agentforge init[/bold] again.",
+                "setting environment variables, or running [bold]agentforge init[/bold] again.\n"
+                "Run [bold]agentforge doctor[/bold] next to verify the setup.",
                 style="code",
             ),
             title=Text("Setup complete", style="bold green"),

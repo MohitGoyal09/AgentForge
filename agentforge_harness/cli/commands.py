@@ -4,6 +4,12 @@ import difflib
 from typing import Any
 from agentforge_harness.agent.events import AgentEventType
 from agentforge_harness.agent.modes import AgentMode
+from agentforge_harness.cli.report import (
+    build_session_report,
+    format_session_report,
+    report_to_json,
+    write_session_export,
+)
 from agentforge_harness.config.config import ApprovalPolicy, Config
 from agentforge_harness.tools.base import ToolInvocation
 from agentforge_harness.tools.builtin.todo import TodosTool
@@ -32,7 +38,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /doctor /new /reload /version /plan /build /name /skills /tools /mcp /stats /todos /exit",
+                "commands: /help /doctor /new /reload /version /plan /build /name /skills /tools /mcp /stats /report /todos /exit",
             ],
             mode=AgentMode.BUILD.value,
         )
@@ -319,26 +325,12 @@ class CLI:
         if name == "/report":
             if self.agent and self.agent.session:
                 s = self.agent.session
-                usage = s.context_manager.get_total_usage() if s.context_manager else None
-                lines = [
-                    f"  Session: {s.name or s.session_id[:8]}",
-                    f"  Model: {self.config.model_name}",
-                    f"  Mode: {s.mode.value}",
-                    f"  Turns: {s._turn_count}",
-                    f"  Created: {s.created_at.strftime('%Y-%m-%d %H:%M')}",
-                    f"  Active skills: {', '.join(s.active_skills) or 'none'}",
-                ]
-                if usage:
-                    lines.append(f"  Prompt tokens: {usage.prompt_tokens}")
-                    lines.append(f"  Completion tokens: {usage.completion_tokens}")
-                    lines.append(f"  Total tokens: {usage.total_tokens}")
-                    if usage.cached_tokens:
-                        lines.append(f"  Cached tokens: {usage.cached_tokens}")
-                lines.append(f"  Tools: {len(s.tool_registry.get_tools())} registered")
-                todo_tool = s.tool_registry.get("todos")
-                if todo_tool and hasattr(todo_tool, "_todos"):
-                    lines.append(f"  Active todos: {len(getattr(todo_tool, '_todos'))}")
-                self.tui.show_notice("\n".join(lines), "Session Report")
+                snapshot = s.create_snapshot(mode=s.mode.value)
+                report = build_session_report(snapshot)
+                if argument == "--json":
+                    console.file.write(report_to_json(report))
+                else:
+                    self.tui.show_notice(format_session_report(report), "Session Report")
             else:
                 self.tui.show_error("No active session")
             return True
@@ -391,40 +383,14 @@ class CLI:
             if not self.agent or not self.agent.session:
                 return True
             fmt = argument or "markdown"
-            if fmt not in ("markdown", "md"):
+            if fmt not in ("markdown", "md", "html"):
                 self.tui.show_error(f"Unknown export format: {fmt}")
                 return True
 
             s = self.agent.session
             snapshot = s.create_snapshot(mode=s.mode.value)
-            lines = [f"# Session: {snapshot.name or snapshot.session_id}"]
-
-            mode_label = getattr(snapshot, "mode", "build")
-            lines.append(f"## Model: {self.config.model_name} | Turns: {snapshot.turn_count}")
-
-            for msg in snapshot.messages or []:
-                role = msg.get("role", "")
-                content = msg.get("content", "") or ""
-                tool_calls = msg.get("tool_calls")
-                if role == "user":
-                    lines.append(f"\n**User:** {content}")
-                elif role == "assistant":
-                    if content:
-                        lines.append(f"\n**Assistant:** {content}")
-                    if tool_calls:
-                        for tc in tool_calls:
-                            fn = tc.get("function", {})
-                            name = fn.get("name", "tool")
-                            args = fn.get("arguments", "{}")
-                            lines.append(f"\n  *→ `{name}(...)`*")
-                elif role == "tool":
-                    tool_id = msg.get("tool_call_id", "")[:8]
-                    preview = content[:500].replace("\n", "\\n") if content else "(empty)"
-                    lines.append(f"\n  *[{tool_id}]* `{preview}`")
-
-            out_path = Path.cwd() / f"session-{snapshot.session_id[:8]}.md"
-            out_path.write_text("\n".join(lines))
-            self.tui.show_export("\n".join(lines), str(out_path))
+            out_path = write_session_export(snapshot, Path.cwd(), fmt)
+            self.tui.show_notice(f"Exported session to: {out_path}", "Export")
             return True
 
         known = [
