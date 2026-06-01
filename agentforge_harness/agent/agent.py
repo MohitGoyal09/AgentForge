@@ -10,6 +10,7 @@ from agentforge_harness.client.response import StreamEventType, TokenUsage, Tool
 from agentforge_harness.config.config import Config
 from agentforge_harness.prompts.system import create_loop_breaker_prompt
 from agentforge_harness.tools.base import ToolConfirmation, ToolResult
+from agentforge_harness.utils.redaction import redact_tool_params
 
 logger = logging.getLogger(__name__)
 
@@ -184,10 +185,11 @@ class Agent:
                 tool_call_results: list[ToolResultMessage] = []
 
                 for tool_call in tool_calls:
+                    display_arguments = self._display_tool_arguments(tool_call.arguments)
                     yield AgentEvent.tool_call_start(
                         tool_call.call_id,
                         tool_call.name,
-                        tool_call.arguments,
+                        display_arguments,
                     )
                     self.session.loop_detector.record_action(
                         "tool_call",
@@ -261,6 +263,12 @@ class Agent:
                 details={"turn": self.session._turn_count},
             )
             return
+
+    def _display_tool_arguments(self, arguments: dict) -> dict:
+        if not self.config.redaction_enabled:
+            return arguments
+        redacted, _ = redact_tool_params(arguments)
+        return redacted
 
     async def __aenter__(self) -> Agent:
         await self.session.initialize()

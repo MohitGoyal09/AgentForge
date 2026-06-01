@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from agentforge_harness.config.config import ApprovalPolicy
 from agentforge_harness.tools.base import ToolConfirmation
+from agentforge_harness.utils.redaction import redact_tool_confirmation
 import re
 
 class ApprovalDecision(str , Enum):
@@ -91,10 +92,12 @@ class ApprovalManager:
         approval_policy : ApprovalPolicy,
         cwd : Path,
         confirmation_callback : Callable[[ToolConfirmation] , Awaitable[bool]] | None = None,
+        redaction_enabled: bool = True,
     ):
      self.approval_policy = approval_policy
      self.cwd = cwd
      self.confirmation_callback = confirmation_callback
+     self.redaction_enabled = redaction_enabled
     
     def _assess_command_safety(self, command : str) -> ApprovalDecision:
         if self.approval_policy == ApprovalPolicy.YOLO:
@@ -146,19 +149,24 @@ class ApprovalManager:
         return ApprovalDecision.APPROVED
     
     def request_confirmation(self, confirmation: ToolConfirmation):
+        display_confirmation = (
+            redact_tool_confirmation(confirmation)
+            if self.redaction_enabled
+            else confirmation
+        )
         if self.confirmation_callback:
-            return self.confirmation_callback(confirmation)
+            return self.confirmation_callback(display_confirmation)
         # No callback configured — default to asking via console
         try:
             from rich.console import Console
             console = Console()
             console.print(f"\n[bold yellow]⚠ Approval Required[/bold yellow]")
-            console.print(f"  Tool: [bold]{confirmation.tool_name}[/bold]")
-            console.print(f"  {confirmation.description}")
-            if confirmation.affected_paths:
-                for p in confirmation.affected_paths:
+            console.print(f"  Tool: [bold]{display_confirmation.tool_name}[/bold]")
+            console.print(f"  {display_confirmation.description}")
+            if display_confirmation.affected_paths:
+                for p in display_confirmation.affected_paths:
                     console.print(f"  Path: {p}")
-            diff_text = confirmation.get_diff_text()
+            diff_text = display_confirmation.get_diff_text()
             if diff_text:
                 console.print(diff_text)
             response = console.input("\n[bold]Approve? (y/n): [/bold]").strip().lower()

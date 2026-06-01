@@ -10,6 +10,11 @@ from enum import Enum
 from pydantic.json_schema import model_json_schema
 
 from agentforge_harness.config.config import Config
+from agentforge_harness.safety.prompt_injection import (
+    get_untrusted_source,
+    is_untrusted_tool_result,
+    wrap_untrusted_content,
+)
 
 
 class ToolKind(str, Enum):
@@ -109,7 +114,10 @@ class ToolResult(BaseModel):
             parts.append(f"[Next: {'; '.join(self.next_actions)}]")
         if not self.success and self.recovery_hint:
             parts.append(f"[Recovery: {self.recovery_hint}]")
-        return "\n".join(parts)
+        output = "\n".join(parts)
+        if is_untrusted_tool_result(self):
+            return wrap_untrusted_content(output, get_untrusted_source(self))
+        return output
 
 
 class ToolConfirmation(BaseModel):
@@ -118,6 +126,7 @@ class ToolConfirmation(BaseModel):
     description: str
 
     diff : FileDiff | None = None
+    diff_text: str | None = None
     affected_paths : list[Path] = field(default_factory=list)
     command : str | None = None
     is_dangerous : bool = False
@@ -125,6 +134,8 @@ class ToolConfirmation(BaseModel):
     def get_diff_text(self) -> str | None:
         if self.diff:
             return self.diff.to_diff()
+        if self.diff_text:
+            return self.diff_text
         return None
 
 

@@ -30,7 +30,11 @@ class Session:
             self.tool_registry
         )
         self.mcp_manager = MCPManager(self.config)
-        self.approval_manager = ApprovalManager(self.config.approval , self.config.cwd)
+        self.approval_manager = ApprovalManager(
+            self.config.approval,
+            self.config.cwd,
+            redaction_enabled=self.config.redaction_enabled,
+        )
         self.skills_manager = SkillManager(self.config.skill_roots)
         self.active_skills : list[str] = []
         self.chat_compactor = ChatCompactor(client=self.client)

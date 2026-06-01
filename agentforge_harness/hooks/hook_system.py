@@ -8,6 +8,7 @@ import tempfile
 from typing import Any
 from agentforge_harness.config.config import Config, HookConfig, HookTrigger
 from agentforge_harness.tools.base import ToolResult
+from agentforge_harness.utils.redaction import redact_tool_params
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,7 @@ class HookSystem:
         tool_params: dict[str, Any],
     ) -> None:
         env = self._build_env(HookTrigger.BEFORE_TOOL, tool_name=tool_name)
-        env["AGENTFORGE_TOOL_PARAMS"] = json.dumps(tool_params)
+        env["AGENTFORGE_TOOL_PARAMS"] = json.dumps(self._hook_tool_params(tool_params))
 
         for hook in self.hooks:
             if hook.trigger == HookTrigger.BEFORE_TOOL:
@@ -130,7 +131,7 @@ class HookSystem:
         tool_result: ToolResult,
     ) -> None:
         env = self._build_env(HookTrigger.AFTER_TOOL, tool_name=tool_name)
-        env["AGENTFORGE_TOOL_PARAMS"] = json.dumps(tool_params)
+        env["AGENTFORGE_TOOL_PARAMS"] = json.dumps(self._hook_tool_params(tool_params))
         env["AGENTFORGE_TOOL_RESULT"] = tool_result.to_model_output()
 
         for hook in self.hooks:
@@ -143,3 +144,9 @@ class HookSystem:
         for hook in self.hooks:
             if hook.trigger == HookTrigger.ON_ERROR:
                 await self._run_hook(hook, env)
+
+    def _hook_tool_params(self, tool_params: dict[str, Any]) -> dict[str, Any]:
+        if not self.config.redaction_enabled:
+            return tool_params
+        redacted, _ = redact_tool_params(tool_params)
+        return redacted

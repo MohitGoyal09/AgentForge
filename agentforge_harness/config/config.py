@@ -133,6 +133,7 @@ class Config(BaseModel):
     max_turns : int = 100
     max_tool_output_tokens : int = 50_000
     redaction_enabled: bool = True
+    prompt_injection_protection_enabled: bool = True
 
     developer_instructions: str | None = None
     user_instructions: str | None = None

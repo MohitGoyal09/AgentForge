@@ -4,6 +4,7 @@ from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.config.config import Config
 from agentforge_harness.hooks.hook_system import HookSystem
 from agentforge_harness.safety.approval import ApprovalContext, ApprovalDecision, ApprovalManager
+from agentforge_harness.safety.prompt_injection import mark_tool_result_untrusted
 from agentforge_harness.tools.base import Tool, ToolInvocation, ToolResult, ToolKind
 from agentforge_harness.utils.redaction import redact_tool_result
 import logging
@@ -74,9 +75,16 @@ class ToolRegistry:
         name: str,
         params: dict[str, Any],
         result: ToolResult,
+        tool: Tool | None = None,
     ) -> ToolResult:
         if self.config.redaction_enabled:
             result = redact_tool_result(result)
+        if self.config.prompt_injection_protection_enabled and tool is not None:
+            result = mark_tool_result_untrusted(
+                result,
+                tool_name=name,
+                tool_kind=tool.kind,
+            )
         await hook_system.trigger_after_tool(name, params, result)
         return result
 
@@ -148,7 +156,7 @@ class ToolRegistry:
                     "tool_name": name,
                 },
             )
-        return await self._finish_tool_result(hook_system, name, params, result)
+        return await self._finish_tool_result(hook_system, name, params, result, tool=tool)
 
 
 def create_default_registry(config: Config) -> ToolRegistry:

@@ -2,7 +2,7 @@
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
-The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, secret redaction, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are cost tracking, prompt-injection fixture tests, a web browser tool, deterministic replay, and read-only swarm orchestration.
+The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are cost tracking, a web browser tool, deterministic replay, and read-only swarm orchestration.
 
 ## Purpose
 
@@ -254,8 +254,9 @@ The registry is responsible for:
 4. Checking approval for mutating operations.
 5. Executing the tool.
 6. Redacting secrets from model-visible tool results when enabled.
-7. Running after-tool hooks.
-8. Returning a `ToolResult`.
+7. Marking tool observations as untrusted data when prompt-injection protection is enabled.
+8. Running after-tool hooks.
+9. Returning a `ToolResult`.
 
 Future improvement: evolve `ToolResult` from mostly raw text into a structured observation:
 
@@ -274,9 +275,13 @@ This is one of the most important harness-learning upgrades because model recove
 
 ### Safety and Approval
 
-Tool outputs pass through centralized secret redaction in `agentforge_harness/utils/redaction.py` before after-tool hooks, model context, TUI events, persistence, and exports see the result. Redaction is enabled by default and records non-secret metadata such as redaction count and detected secret kinds.
+Tool outputs pass through centralized secret redaction in `agentforge_harness/utils/redaction.py` before after-tool hooks, model context, TUI events, persistence, and exports see the result. Tool-call arguments are also redacted before TUI display and hook environment variables, and approval confirmations redact commands, params, and diff previews before asking the user. Redaction is enabled by default and records non-secret metadata such as redaction count and detected secret kinds.
 
 Current redaction coverage includes common OpenAI/OpenRouter/Anthropic API key shapes, GitHub tokens, JWTs, private key blocks, and generic `API_KEY`/`TOKEN`/`SECRET`/`PASSWORD` assignments. This protects obvious leaks in observations, but it is not a sandbox and does not make arbitrary tools or MCP servers safe.
+
+Tool observations also pass through prompt-injection boundary handling in `agentforge_harness/safety/prompt_injection.py`. When enabled, tool results carry trust metadata and model-visible observations are wrapped in `<untrusted_content>` tags. The wrapper tells the model that file contents, command output, web pages, MCP responses, and other tool observations are data, not instructions. This reduces accidental instruction promotion while keeping the original TUI output readable.
+
+Prompt-injection protection is a boundary layer, not a complete policy engine. It does not yet trace whether a later tool call was derived from untrusted content, and it does not sandbox shell commands or MCP servers.
 
 The approval layer in `agentforge_harness/safety/approval.py` classifies operations using:
 
@@ -685,6 +690,7 @@ hooks_enabled = true
 approval = "on-request"
 max_turns = 100
 redaction_enabled = true
+prompt_injection_protection_enabled = true
 skills_enabled = true
 # Optional extra roots. `.agentforge/skills` is detected automatically.
 skill_roots = [".skills"]
@@ -837,8 +843,8 @@ Recommended next implementation order:
 
 1. Add eval harness (LLM judge, CI integration, diff mode).
 2. Add cost tracking (`/cost` command).
-3. Add secret scanning.
-4. Add prompt injection test suite.
+3. Add control-character stripping and central output cleanup.
+4. Add prompt-injection origin tracking for high-risk follow-up tool calls.
 5. Add web browser tool.
 6. Add git tools.
 7. Add deterministic replay from event logs.

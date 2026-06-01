@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from agentforge_harness.tools.base import ToolResult
+from agentforge_harness.tools.base import FileDiff, ToolConfirmation, ToolResult
 
 
 @dataclass
@@ -170,3 +170,44 @@ def redact_tool_result(result: ToolResult) -> ToolResult:
     updates["metadata"] = redacted_metadata
 
     return result.model_copy(update=updates)
+
+
+def redact_tool_params(params: dict[str, Any]) -> tuple[dict[str, Any], RedactionReport]:
+    redacted, report = redact_value(params)
+    return redacted, report
+
+
+def redact_tool_confirmation(confirmation: ToolConfirmation) -> ToolConfirmation:
+    report = RedactionReport()
+    updates: dict[str, Any] = {}
+
+    redacted_params, params_report = redact_tool_params(confirmation.params)
+    report.merge(params_report)
+    updates["params"] = redacted_params
+
+    for field_name in ("description", "command", "diff_text"):
+        value = getattr(confirmation, field_name)
+        if value is None:
+            continue
+        redacted_value, field_report = redact_value(value)
+        report.merge(field_report)
+        updates[field_name] = redacted_value
+
+    if confirmation.diff:
+        old_content, old_report = redact_text(confirmation.diff.old_content)
+        new_content, new_report = redact_text(confirmation.diff.new_content)
+        report.merge(old_report)
+        report.merge(new_report)
+        updates["diff"] = FileDiff(
+            path=confirmation.diff.path,
+            old_content=old_content,
+            new_content=new_content,
+            is_new_file=confirmation.diff.is_new_file,
+            is_deletion=confirmation.diff.is_deletion,
+        )
+
+    if report.count:
+        description = updates.get("description", confirmation.description)
+        updates["description"] = f"{description} [redacted {report.count} secret(s)]"
+
+    return confirmation.model_copy(update=updates)

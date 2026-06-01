@@ -13,7 +13,7 @@ AgentForge already includes the main pieces of a coding-agent harness:
 | Agent loop | ReAct-style async loop with streamed events |
 | Model providers | OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible endpoints |
 | Tools | File tools, shell, search/fetch, todos, memory, patch, and subagents |
-| Safety | Approval policies, path checks, shell safety rules, mutating-tool prompts, and secret redaction |
+| Safety | Approval policies, path checks, shell safety rules, mutating-tool prompts, secret/param redaction, and untrusted tool-observation wrapping |
 | Context | Token estimation, pruning, compression, and loop detection |
 | Skills | Progressive SKILL.md discovery and activation |
 | Modes | Plan and build modes with tool restrictions |
@@ -40,8 +40,7 @@ Focus: make harness changes measurable instead of vibe-based.
 
 - Add a lightweight eval runner with mock and real-model modes.
 - Add regression scenarios for file edits, shell use, patching, skills, and plan/build mode.
-- Add prompt-injection tests for files, shell output, and web content.
-- Add prompt-injection tests and stricter untrusted-content handling.
+- Expand prompt-injection scenarios for shell output, web content, MCP responses, and multi-turn follow-up actions.
 - Track token usage and estimated cost per turn/session.
 - Save eval reports as artifacts that can be compared across runs.
 
@@ -89,7 +88,8 @@ These are small, high-leverage improvements pulled from the older internal PRD-s
 | P0 | Done | Add a smoke test for `agentforge init` output | Prevents broken first-run config files. |
 | P0 | Done | Add provider adapter tests for OpenAI-compatible and Anthropic tool calls | Keeps multi-provider support from silently regressing. |
 | P0 | Done | Add secret redaction for tool outputs | Stops obvious key leaks from entering model context or logs. |
-| P0 | Open | Add prompt-injection fixture tests for `read_file` and `web_fetch` content | Tests the most important safety boundary for coding agents. |
+| P0 | Done | Add prompt-injection fixture tests and untrusted tool-observation wrapping | Tests the most important safety boundary for coding agents. |
+| P0 | Done | Add approval prompt and tool-param redaction | Keeps secrets out of approval previews, TUI argument panels, and hook params. |
 | P1 | Open | Add `/cost` using token usage already collected | Turns existing telemetry into useful feedback. |
 | P1 | Done | Add structured `git_diff` read-only tool | Safer and more useful than asking the model to parse raw shell output. |
 | P1 | Done | Improve patch tests around symlinks, parent dirs, and no-newline files | Patch is powerful, so confidence here matters. |
@@ -101,8 +101,8 @@ These are small, high-leverage improvements pulled from the older internal PRD-s
 
 Recommended order before v1:
 
-1. Prompt-injection test fixtures.
-2. `/cost` command from existing token usage.
+1. `/cost` command from existing token usage.
+2. Add central output cleanup for control characters and large outputs.
 3. Add automation-friendly JSON reporting.
 4. Consider HTML session export once the core safety work is stronger.
 
@@ -112,8 +112,8 @@ Security work should land in layers. AgentForge should be honest about its prote
 
 | Layer | Planned work |
 | --- | --- |
-| Output hygiene | Secret redaction is in place; strip control characters and cap large outputs consistently |
-| Prompt injection | Wrap untrusted file/web content clearly and test known attacks |
+| Output hygiene | Secret and param redaction are in place; strip control characters and cap large outputs consistently |
+| Prompt injection | Basic untrusted wrapping is in place; add origin tracking for high-risk follow-up actions |
 | Shell safety | Expand obfuscation detection and add stricter allowlist mode |
 | Config safety | Warn on risky config/env file permissions and committed `.env` files |
 | MCP safety | Document that MCP servers are trusted code until sandboxing exists |
