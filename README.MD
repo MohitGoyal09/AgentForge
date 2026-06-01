@@ -30,6 +30,7 @@ When published, install the package from PyPI:
 ```bash
 pip install agentforge-harness
 agentforge init
+agentforge doctor
 agentforge
 ```
 
@@ -38,6 +39,7 @@ For local development from this repository:
 ```bash
 pip install -e ".[dev]"
 agentforge --version
+agentforge doctor
 ```
 
 ## Architecture
@@ -748,6 +750,13 @@ Use a different working directory:
 agentforge run --cwd /path/to/project
 ```
 
+Check local readiness:
+
+```bash
+agentforge doctor
+agentforge doctor --json
+```
+
 Interactive commands:
 
 | Command | Status | Purpose |
@@ -762,6 +771,7 @@ Interactive commands:
 | `/report` | implemented | Show session summary report |
 | `/clear` | implemented | Clear conversation history |
 | `/config` | implemented | Show configuration (Rich Table) |
+| `/doctor` | implemented | Check config, provider keys, skill roots, MCP commands, and safety flags |
 | `/model <name>` | implemented | Change model for current session |
 | `/approval <mode>` | implemented | Change approval policy |
 | `/stats` | implemented | Show token/session stats |

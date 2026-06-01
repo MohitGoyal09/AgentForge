@@ -4,8 +4,8 @@ import click
 from pathlib import Path
 from importlib.metadata import version, PackageNotFoundError
 from agentforge_harness.cli.commands import CLI
+from agentforge_harness.cli.doctor import build_doctor_report, print_doctor_report
 from agentforge_harness.cli.setup import run_setup
-from agentforge_harness.config.config import Config
 from agentforge_harness.config.loader import load_config
 from agentforge_harness.ui.tui import get_console
 
@@ -46,6 +46,27 @@ def init() -> None:
     """Run the setup wizard to configure API key and settings."""
     success = run_setup()
     sys.exit(0 if success else 1)
+
+
+@cli.command()
+@click.option(
+    "--cwd",
+    "-c",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Current working directory",
+)
+@click.option("--json", "json_output", is_flag=True, help="Print machine-readable JSON.")
+def doctor(cwd: Path | None, json_output: bool) -> None:
+    """Check local AgentForge configuration and runtime readiness."""
+    try:
+        config = load_config(cwd)
+    except Exception as e:
+        console.print(f"[error]Configuration Error : {e}[/error]")
+        sys.exit(1)
+
+    report = build_doctor_report(config)
+    print_doctor_report(report, console=console, json_output=json_output)
+    sys.exit(1 if report.has_errors else 0)
 
 
 @cli.command()

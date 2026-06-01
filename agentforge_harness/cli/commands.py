@@ -32,7 +32,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /new /reload /version /plan /build /name /skills /tools /mcp /stats /todos /exit",
+                "commands: /help /doctor /new /reload /version /plan /build /name /skills /tools /mcp /stats /todos /exit",
             ],
             mode=AgentMode.BUILD.value,
         )
@@ -97,6 +97,14 @@ class CLI:
             return True
         if name == "/config":
             self.tui.show_config(self._redact_config(self.config.to_dict()))
+            return True
+        if name == "/doctor":
+            from agentforge_harness.cli.doctor import build_doctor_report, print_doctor_report
+
+            print_doctor_report(
+                build_doctor_report(self.config),
+                console=console,
+            )
             return True
         if name == "/model":
             if not argument:
@@ -421,7 +429,7 @@ class CLI:
 
         known = [
             "/help", "/exit", "/quit", "/clear", "/config", "/model",
-            "/approval", "/stats", "/todos", "/tools", "/skills", "/skill",
+            "/doctor", "/approval", "/stats", "/todos", "/tools", "/skills", "/skill",
             "/unskill", "/mcp", "/name", "/save", "/sessions", "/resume",
             "/checkpoint", "/checkpoints", "/restore", "/plan", "/build",
             "/new", "/reload", "/version", "/retry", "/history", "/report",

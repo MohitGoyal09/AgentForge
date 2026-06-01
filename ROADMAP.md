@@ -91,6 +91,7 @@ These are small, high-leverage improvements pulled from the older internal PRD-s
 | P0 | Done | Add prompt-injection fixture tests and untrusted tool-observation wrapping | Tests the most important safety boundary for coding agents. |
 | P0 | Done | Add approval prompt and tool-param redaction | Keeps secrets out of approval previews, TUI argument panels, and hook params. |
 | P0 | Done | Add central output cleanup for control characters and large outputs | Prevents terminal escape noise and oversized observations from leaking across model, hooks, TUI, and persistence. |
+| P0 | Done | Add `agentforge doctor` health checks | Helps users diagnose config, provider keys, skill roots, MCP commands, and safety flags before runtime. |
 | P1 | Open | Add `/cost` using token usage already collected | Turns existing telemetry into useful feedback. |
 | P1 | Done | Add structured `git_diff` read-only tool | Safer and more useful than asking the model to parse raw shell output. |
 | P1 | Done | Improve patch tests around symlinks, parent dirs, and no-newline files | Patch is powerful, so confidence here matters. |
@@ -104,7 +105,7 @@ Recommended order before v1:
 
 1. `/cost` command from existing token usage.
 2. Add automation-friendly JSON reporting.
-3. Add config validation warnings for risky files and MCP trust boundaries.
+3. Expand config safety warnings for risky files and MCP trust boundaries.
 4. Consider HTML session export once the core safety work is stronger.
 
 ## Security Roadmap

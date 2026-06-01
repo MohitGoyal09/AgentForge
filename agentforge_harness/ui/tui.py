@@ -1001,6 +1001,7 @@ class TUI:
 - `/report` - Show session summary report
 - `/clear` - Clear conversation history
 - `/config` - Show current configuration
+- `/doctor` - Check local config and runtime readiness
 - `/model <name>` - Change the model
 - `/approval <mode>` - Change approval mode
 - `/export` - Export session as markdown (saves to ./session-{id}.md)

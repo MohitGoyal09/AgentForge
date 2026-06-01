@@ -9,6 +9,7 @@
 - Setup wizard prompts for provider, model, and base URL.
 - Provider and setup tests covering config resolution, Anthropic conversion, and generated TOML shape.
 - Read-only `git_diff` tool for structured repository diff inspection.
+- `agentforge doctor` and `/doctor` health checks with optional JSON output.
 - `CONTRIBUTING.md` and GitHub issue templates for open-source contributors.
 - Patch tool intent metadata, parent-directory policy, deletion fallback handling, and edge-case tests.
 - Central output hygiene for tool results, including ANSI/control-character stripping and model-visible field caps.
