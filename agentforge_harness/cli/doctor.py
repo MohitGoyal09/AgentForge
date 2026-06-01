@@ -16,7 +16,12 @@ from rich.table import Table
 from rich.text import Text
 
 from agentforge_harness.config.config import ApprovalPolicy, Config
-from agentforge_harness.config.loader import get_data_dir, get_global_skills_dir, get_user_skills_dir
+from agentforge_harness.config.loader import (
+    get_data_dir,
+    get_global_skills_dir,
+    get_system_config_path,
+    get_user_skills_dir,
+)
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,7 @@ def build_doctor_report(config: Config) -> DoctorReport:
 
     checks.extend(_check_package())
     checks.extend(_check_config(config))
+    checks.extend(_check_config_files(config))
     checks.extend(_check_provider(config))
     checks.extend(_check_cwd(config))
     checks.extend(_check_workspace_paths(config))
@@ -150,6 +156,31 @@ def _check_config(config: Config) -> list[DoctorCheck]:
             detail="Fix config or run agentforge init",
         )
         for error in errors
+    ]
+
+
+def _check_config_files(config: Config) -> list[DoctorCheck]:
+    checks: list[DoctorCheck] = []
+    paths = [
+        ("config.system", get_system_config_path()),
+        ("config.project", config.cwd / ".agentforge" / "config.toml"),
+    ]
+
+    for name, path in paths:
+        if not path.exists():
+            continue
+        checks.append(_file_permission_check(name, path, recommended_private=True))
+
+    if checks:
+        return checks
+
+    return [
+        DoctorCheck(
+            name="config.files",
+            status="warn",
+            message="No config.toml file found",
+            detail="Defaults are in use; run agentforge init for a saved config",
+        )
     ]
 
 
@@ -469,36 +500,7 @@ def _check_safety(config: Config) -> list[DoctorCheck]:
 
 def _check_env_file(env_path: Path, cwd: Path) -> list[DoctorCheck]:
     checks: list[DoctorCheck] = []
-    try:
-        mode = stat.S_IMODE(env_path.stat().st_mode)
-    except OSError as exc:
-        return [
-            DoctorCheck(
-                name="safety.env",
-                status="warn",
-                message="Could not inspect workspace .env",
-                detail=str(exc),
-            )
-        ]
-
-    if mode & (stat.S_IRWXG | stat.S_IRWXO):
-        checks.append(
-            DoctorCheck(
-                name="safety.env.permissions",
-                status="warn",
-                message=".env is readable or writable by group/other users",
-                detail=f"mode={oct(mode)}; recommended=0o600",
-            )
-        )
-    else:
-        checks.append(
-            DoctorCheck(
-                name="safety.env.permissions",
-                status="ok",
-                message=".env permissions are private",
-                detail=f"mode={oct(mode)}",
-            )
-        )
+    checks.append(_file_permission_check("safety.env.permissions", env_path, recommended_private=True))
 
     if _is_git_tracked(env_path, cwd):
         checks.append(
@@ -519,7 +521,53 @@ def _check_env_file(env_path: Path, cwd: Path) -> list[DoctorCheck]:
             )
         )
 
+    if _is_git_ignored(env_path, cwd):
+        checks.append(
+            DoctorCheck(
+                name="safety.env.gitignore",
+                status="ok",
+                message=".env is ignored by git",
+                detail=str(env_path),
+            )
+        )
+    else:
+        checks.append(
+            DoctorCheck(
+                name="safety.env.gitignore",
+                status="warn",
+                message=".env is not ignored by git",
+                detail="Add .env to .gitignore to reduce accidental secret commits",
+            )
+        )
+
     return checks
+
+
+def _file_permission_check(name: str, path: Path, recommended_private: bool) -> DoctorCheck:
+    try:
+        mode = stat.S_IMODE(path.stat().st_mode)
+    except OSError as exc:
+        return DoctorCheck(
+            name=name,
+            status="warn",
+            message=f"Could not inspect permissions for {path.name}",
+            detail=str(exc),
+        )
+
+    if recommended_private and mode & (stat.S_IRWXG | stat.S_IRWXO):
+        return DoctorCheck(
+            name=name,
+            status="warn",
+            message=f"{path.name} is readable or writable by group/other users",
+            detail=f"mode={oct(mode)}; recommended=0o600",
+        )
+
+    return DoctorCheck(
+        name=name,
+        status="ok",
+        message=f"{path.name} permissions are private",
+        detail=f"mode={oct(mode)}",
+    )
 
 
 def _is_git_tracked(path: Path, cwd: Path) -> bool:
@@ -531,6 +579,24 @@ def _is_git_tracked(path: Path, cwd: Path) -> bool:
         return False
     result = subprocess.run(
         ["git", "ls-files", "--error-unmatch", "--", relative],
+        cwd=cwd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _is_git_ignored(path: Path, cwd: Path) -> bool:
+    if not (cwd / ".git").exists():
+        return False
+    try:
+        relative = os.path.relpath(path.resolve(), cwd.resolve())
+    except ValueError:
+        return False
+    result = subprocess.run(
+        ["git", "check-ignore", "--quiet", "--", relative],
         cwd=cwd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

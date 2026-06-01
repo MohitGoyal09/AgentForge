@@ -109,9 +109,19 @@ def render_session_markdown(snapshot: SessionSnapshot) -> str:
 
 def render_session_html(snapshot: SessionSnapshot) -> str:
     report = build_session_report(snapshot)
-    summary_rows = "\n".join(
-        f"<tr><th>{html.escape(key)}</th><td>{html.escape(str(value))}</td></tr>"
+    summary_cards = "\n".join(
+        f'<div class="metric"><span>{html.escape(key)}</span><strong>{html.escape(str(value))}</strong></div>'
         for key, value in _flatten_report_summary(report).items()
+    )
+    usage = report.get("usage", {})
+    usage_rows = "\n".join(
+        f"<tr><th>{html.escape(key)}</th><td>{html.escape(str(value))}</td></tr>"
+        for key, value in {
+            "Prompt tokens": usage.get("prompt_tokens", 0),
+            "Completion tokens": usage.get("completion_tokens", 0),
+            "Total tokens": usage.get("total_tokens", 0),
+            "Cached tokens": usage.get("cached_tokens", 0),
+        }.items()
     )
     transcript = "\n".join(_render_message_html(msg) for msg in snapshot.messages or [])
 
@@ -123,25 +133,49 @@ def render_session_html(snapshot: SessionSnapshot) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AgentForge Session - {title}</title>
   <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 2rem; line-height: 1.5; color: #17202a; }}
-    main {{ max-width: 980px; margin: 0 auto; }}
-    h1 {{ margin-bottom: 0.25rem; }}
+    :root {{ color-scheme: light dark; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; line-height: 1.5; color: #17202a; background: #f6f8fa; }}
+    main {{ max-width: 1080px; margin: 0 auto; padding: 2rem; }}
+    header {{ margin-bottom: 1.5rem; }}
+    h1 {{ margin: 0 0 0.25rem; }}
+    h2 {{ margin-top: 2rem; }}
+    .subtle {{ color: #57606a; margin: 0; }}
+    .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
+    .metric {{ background: #fff; border: 1px solid #d8dee4; border-radius: 6px; padding: 0.75rem; }}
+    .metric span {{ display: block; color: #57606a; font-size: 0.78rem; text-transform: uppercase; }}
+    .metric strong {{ display: block; font-size: 1rem; overflow-wrap: anywhere; }}
     table {{ border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }}
     th, td {{ border: 1px solid #d8dee4; padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }}
     th {{ width: 13rem; background: #f6f8fa; }}
-    .msg {{ border: 1px solid #d8dee4; border-radius: 6px; padding: 0.8rem 1rem; margin: 0.8rem 0; }}
-    .role {{ font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.04em; color: #57606a; }}
+    details.msg {{ background: #fff; border: 1px solid #d8dee4; border-radius: 6px; padding: 0.8rem 1rem; margin: 0.8rem 0; }}
+    details.msg summary {{ cursor: pointer; font-weight: 700; }}
+    .role-user summary {{ color: #0969da; }}
+    .role-assistant summary {{ color: #1a7f37; }}
+    .role-tool summary {{ color: #8250df; }}
     pre {{ white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }}
-    details {{ margin-top: 0.5rem; }}
+    .content {{ margin-top: 0.75rem; }}
+    @media (prefers-color-scheme: dark) {{
+      body {{ background: #0d1117; color: #e6edf3; }}
+      .metric, details.msg {{ background: #161b22; border-color: #30363d; }}
+      table th, table td {{ border-color: #30363d; }}
+      th {{ background: #161b22; }}
+      .subtle, .metric span {{ color: #8b949e; }}
+    }}
   </style>
 </head>
 <body>
 <main>
-  <h1>AgentForge Session</h1>
-  <p>{title}</p>
+  <header>
+    <h1>AgentForge Session</h1>
+    <p class="subtle">{title}</p>
+  </header>
   <h2>Summary</h2>
+  <section class="metrics">
+    {summary_cards}
+  </section>
+  <h2>Usage</h2>
   <table>
-    {summary_rows}
+    {usage_rows}
   </table>
   <h2>Transcript</h2>
   {transcript}
@@ -176,18 +210,14 @@ def _flatten_report_summary(report: dict[str, Any]) -> dict[str, Any]:
     return {
         "Session": report.get("name") or report.get("session_id"),
         "Mode": report.get("mode"),
-        "CWD": report.get("cwd"),
         "Model": model.get("name") or "unknown",
         "Provider": model.get("provider") or "unknown",
         "Turns": report.get("turn_count"),
         "Messages": report.get("message_count"),
-        "Total tokens": usage.get("total_tokens", 0),
-        "Prompt tokens": usage.get("prompt_tokens", 0),
-        "Completion tokens": usage.get("completion_tokens", 0),
-        "Cached tokens": usage.get("cached_tokens", 0),
         "Tools": tools.get("count", 0),
         "Active skills": ", ".join(report.get("skills") or []) or "none",
         "Todos": todos.get("count", 0),
+        "CWD": report.get("cwd"),
         "Updated": report.get("updated_at"),
     }
 
@@ -196,12 +226,24 @@ def _render_message_html(msg: dict[str, Any]) -> str:
     role = html.escape(str(msg.get("role", "unknown")))
     content = html.escape(str(msg.get("content", "") or ""))
     tool_calls = msg.get("tool_calls")
-    details = ""
+    tool_call_details = ""
     if tool_calls:
         payload = html.escape(json.dumps(tool_calls, indent=2, default=str))
-        details = f"<details><summary>Tool calls</summary><pre>{payload}</pre></details>"
-    return f"""<section class="msg">
-  <div class="role">{role}</div>
-  <pre>{content}</pre>
-  {details}
-</section>"""
+        tool_call_details = f"<details><summary>Tool calls</summary><pre>{payload}</pre></details>"
+    title = html.escape(_message_title(msg))
+    open_attr = " open" if role != "tool" else ""
+    return f"""<details class="msg role-{role}"{open_attr}>
+  <summary>{title}</summary>
+  <div class="content"><pre>{content}</pre></div>
+  {tool_call_details}
+</details>"""
+
+
+def _message_title(msg: dict[str, Any]) -> str:
+    role = str(msg.get("role", "unknown"))
+    if role == "tool":
+        tool_id = str(msg.get("tool_call_id", ""))[:8]
+        return f"Tool result {tool_id}" if tool_id else "Tool result"
+    content = str(msg.get("content", "") or "").strip().splitlines()
+    preview = content[0][:80] if content else ""
+    return f"{role.title()}: {preview}" if preview else role.title()

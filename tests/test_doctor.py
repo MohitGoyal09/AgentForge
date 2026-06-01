@@ -112,6 +112,7 @@ def test_doctor_warns_for_permissive_workspace_env(monkeypatch, tmp_path: Path):
 
     assert statuses["safety.env.permissions"] == "warn"
     assert statuses["safety.env.git"] == "ok"
+    assert statuses["safety.env.gitignore"] == "warn"
 
 
 def test_doctor_errors_when_workspace_env_is_tracked(monkeypatch, tmp_path: Path):
@@ -134,6 +135,43 @@ def test_doctor_errors_when_workspace_env_is_tracked(monkeypatch, tmp_path: Path
     assert report.has_errors
     assert statuses["safety.env.permissions"] == "ok"
     assert statuses["safety.env.git"] == "error"
+
+
+def test_doctor_reports_config_file_permissions(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('approval = "on-request"\n', encoding="utf-8")
+    os.chmod(config_path, 0o644)
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_system_config_path", lambda: config_path)
+
+    config = Config(
+        cwd=tmp_path,
+        model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o-mini"),
+    )
+
+    statuses = _statuses(build_doctor_report(config))
+
+    assert statuses["config.system"] == "warn"
+
+
+def test_doctor_ok_when_env_is_gitignored(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.DEVNULL)
+    (tmp_path / ".gitignore").write_text(".env\n", encoding="utf-8")
+    env_path = tmp_path / ".env"
+    env_path.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    os.chmod(env_path, 0o600)
+
+    config = Config(
+        cwd=tmp_path,
+        model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o-mini"),
+    )
+
+    statuses = _statuses(build_doctor_report(config))
+
+    assert statuses["safety.env.gitignore"] == "ok"
 
 
 def test_doctor_warns_for_mcp_cwd_outside_workspace(monkeypatch, tmp_path: Path):

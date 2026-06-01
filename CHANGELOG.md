@@ -1,13 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 (planned)
 
 ### Added
 
 - Multi-provider model configuration for OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible endpoints.
 - Anthropic client adapter with message and tool-call conversion.
 - Setup wizard prompts for provider, model, and base URL.
+- Setup wizard overwrite protection, provider-specific hints, and optional local doctor check.
 - Provider and setup tests covering config resolution, Anthropic conversion, and generated TOML shape.
+- Provider setup docs, security model docs, release smoke script, and runnable examples index.
 - Read-only `git_diff` tool for structured repository diff inspection.
 - `agentforge doctor` and `/doctor` health checks with optional JSON output.
 - `agentforge report` command and `/report --json` for saved-session reporting without model calls.
@@ -25,8 +27,9 @@
 - Roadmap rewritten as an open-source release roadmap with pre-v1 quick wins and v1 release criteria.
 - Package metadata now points to the Agentforge GitHub repository.
 - Setup now writes config and env files with private permissions and nudges users toward `agentforge doctor`.
+- HTML session export now includes summary cards, usage table, dark-mode styles, and collapsible transcript entries.
 - Tool errors now get a default recovery contract when a specific tool does not provide one.
-- Doctor now reports `.env` permissions, tracked `.env` files, and out-of-workspace executable paths more explicitly.
+- Doctor now reports config permissions, `.env` permissions, tracked `.env` files, missing `.env` ignore rules, and out-of-workspace executable paths more explicitly.
 
 ## 0.1.0 (2026-05-30)
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 import os
 from rich.console import Console
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.panel import Panel
 from rich.text import Text
 from rich import box
@@ -25,6 +25,30 @@ API_KEY_ENV = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "custom": "API_KEY",
+}
+BASE_URL_ENV = {
+    "openrouter": "OPENROUTER_BASE_URL",
+    "openai": "OPENAI_BASE_URL",
+    "anthropic": "ANTHROPIC_BASE_URL",
+    "custom": "BASE_URL",
+}
+PROVIDER_HINTS = {
+    "openrouter": (
+        "OpenRouter routes through an OpenAI-compatible API. Model names usually look "
+        "like provider/model, for example openai/gpt-4o-mini."
+    ),
+    "openai": (
+        "OpenAI uses the native OpenAI SDK path. Leave Base URL empty unless you are "
+        "intentionally using an OpenAI-compatible proxy."
+    ),
+    "anthropic": (
+        "Anthropic uses the native Anthropic SDK path. Leave Base URL empty for the "
+        "hosted Anthropic API."
+    ),
+    "custom": (
+        "Custom providers must expose an OpenAI-compatible /v1 API, such as Ollama, "
+        "vLLM, LM Studio, or another local gateway."
+    ),
 }
 
 console = Console()
@@ -62,6 +86,24 @@ def _write_config_file(config_path: Path, provider: str, model: str, base_url: s
     os.chmod(config_path, 0o600)
 
 
+def _existing_setup_files(env_path: Path, config_path: Path) -> list[Path]:
+    return [path for path in (env_path, config_path) if path.exists()]
+
+
+def _provider_help(provider: str) -> str:
+    api_key_env = API_KEY_ENV[provider]
+    base_url_env = BASE_URL_ENV[provider]
+    default_model = DEFAULT_MODELS[provider]
+    default_base_url = DEFAULT_BASE_URLS[provider] or "provider default"
+    return (
+        f"{PROVIDER_HINTS[provider]}\n\n"
+        f"API key env: {api_key_env}\n"
+        f"Base URL env: {base_url_env}\n"
+        f"Default base URL: {default_base_url}\n"
+        f"Suggested model: {default_model}"
+    )
+
+
 def run_setup() -> bool:
     config_dir = get_config_dir()
     env_path = config_dir / ".env"
@@ -92,6 +134,27 @@ def run_setup() -> bool:
     )
     console.print()
 
+    existing_files = _existing_setup_files(env_path, config_path)
+    if existing_files:
+        file_list = "\n".join(f"- {path}" for path in existing_files)
+        console.print(
+            Panel(
+                Text(
+                    "Existing AgentForge setup files were found:\n\n"
+                    f"{file_list}\n\n"
+                    "Continuing will overwrite these files.",
+                    style="code",
+                ),
+                title=Text("Existing setup", style="bold yellow"),
+                border_style="yellow",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+        if not Confirm.ask("Overwrite existing setup files?", default=False):
+            console.print("[warning]Setup cancelled. Existing files were left unchanged.[/warning]")
+            return False
+
     provider = Prompt.ask(
         "Provider",
         choices=list(PROVIDERS),
@@ -99,6 +162,16 @@ def run_setup() -> bool:
     )
     default_base_url = DEFAULT_BASE_URLS[provider]
     default_model = DEFAULT_MODELS[provider]
+
+    console.print(
+        Panel(
+            Text(_provider_help(provider), style="code"),
+            title=Text(f"{provider} settings", style="bold cyan"),
+            border_style="cyan",
+            box=box.ROUNDED,
+            padding=(1, 2),
+        )
+    )
 
     api_key = Prompt.ask("API key", password=True)
     if not api_key:
@@ -135,4 +208,13 @@ def run_setup() -> bool:
             padding=(1, 2),
         )
     )
+    if Confirm.ask("Run local doctor check now?", default=True):
+        from agentforge_harness.cli.doctor import build_doctor_report, print_doctor_report
+        from agentforge_harness.config.loader import load_config
+
+        try:
+            print_doctor_report(build_doctor_report(load_config(Path.cwd())), console=console)
+        except Exception as exc:
+            console.print(f"[warning]Doctor check could not run: {exc}[/warning]")
+
     return True

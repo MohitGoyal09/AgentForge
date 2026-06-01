@@ -2,7 +2,7 @@
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
-The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, output hygiene, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, JSON reports, HTML/markdown session export, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are evals, browser-assisted local QA, deterministic replay, and read-only swarm orchestration.
+The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, output hygiene, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, JSON reports, HTML/markdown session export, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The next major learning milestones are browser-assisted local QA, deterministic replay, read-only swarm orchestration, and later a dedicated eval system.
 
 ## Purpose
 
@@ -625,7 +625,7 @@ Every agent event handled by the CLI is appended to JSONL under `events/`.
 }
 ```
 
-This is the foundation for replay, debugging, evals, and UI trace inspection.
+This is the foundation for replay, debugging, audit trails, and UI trace inspection.
 
 ### Checkpoints
 
@@ -835,10 +835,19 @@ python3 -m py_compile agentforge_harness/agent/agent.py agentforge_harness/tools
 Extension examples:
 
 - [Extending AgentForge](docs/extensions.md)
+- [Provider setup](docs/providers.md)
+- [Security model](SECURITY.md)
+- [Examples index](examples/README.md)
 - [Custom tool example](examples/custom_tool.py)
 - [Skill example](examples/skills/api-interface-design/SKILL.md)
 - [Hook example](examples/hooks/log_tool_call.py)
 - [Subagent example](examples/subagents/code-review.toml)
+
+Release smoke:
+
+```bash
+python3 scripts/release_smoke.py
+```
 
 Recommended future test layout:
 
@@ -870,16 +879,15 @@ Completed foundation:
 
 Recommended next implementation order:
 
-1. Add eval harness (LLM judge, CI integration, diff mode).
-2. Add prompt-injection origin tracking for high-risk follow-up tool calls.
-3. Add browser-assisted local QA.
-4. Add deterministic replay.
-5. Add web browser tool.
-6. Add git tools.
-7. Add deterministic replay from event logs.
-8. Add read-only swarm mode.
-9. Add workspace rollback for checkpoints.
-10. Add write-capable swarm mode with file ownership.
+1. Add prompt-injection origin tracking for high-risk follow-up tool calls.
+2. Add browser-assisted local QA.
+3. Add deterministic replay from event logs.
+4. Add web browser tool.
+5. Add git tools.
+6. Add read-only swarm mode.
+7. Add workspace rollback for checkpoints.
+8. Add write-capable swarm mode with file ownership.
+9. Add eval harness when you are ready to study evaluation design.
 
 ## Current Status
 
@@ -913,7 +921,6 @@ Implemented:
 
 In progress or planned:
 
-- Eval harness: scenarios, mock mode, runner, LLM judge, CI integration
 - Cost tracking (`/cost`)
 - Secret scanning
 - Prompt injection test suite

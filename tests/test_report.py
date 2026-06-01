@@ -58,6 +58,9 @@ def test_render_exports_escape_html():
 
     assert "&lt;done&gt;" in html
     assert "<done>" not in html
+    assert '<section class="metrics">' in html
+    assert "<summary>User: hello</summary>" in html
+    assert "<h2>Usage</h2>" in html
     assert "**User:** hello" in markdown
 
 
