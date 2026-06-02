@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="AgentForge pixel-art banner" width="100%">
+  <img src="https://raw.githubusercontent.com/MohitGoyal09/claudecode/master/docs/assets/banner.png" alt="AgentForge pixel-art banner" width="100%">
 </p>
 
 # AgentForge
