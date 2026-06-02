@@ -25,9 +25,17 @@ def _statuses(report):
     return {check.name: check.status for check in report.checks}
 
 
+def _with_saved_config(monkeypatch, tmp_path: Path) -> Path:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('approval = "on-request"\n', encoding="utf-8")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_system_config_path", lambda: config_path)
+    return config_path
+
+
 def test_doctor_reports_ready_config(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    _with_saved_config(monkeypatch, tmp_path)
     skill_root = tmp_path / ".agentforge" / "skills"
     skill_root.mkdir(parents=True)
 
@@ -59,11 +67,10 @@ def test_doctor_human_output_is_grouped_and_actionable(monkeypatch, tmp_path: Pa
     print_doctor_report(report, console=console)
 
     rendered = output.getvalue()
-    assert "AgentForge is not ready yet." in rendered
+    assert "AgentForge is not initialized." in rendered
     assert "Setup" in rendered
-    assert "Provider" in rendered
-    assert "fix: Run agentforge init" in rendered
-    assert "detail:" in rendered
+    assert "Provider" not in rendered
+    assert "Run agentforge init first" in rendered
     assert "Status" not in rendered
     assert "Doctor Checks" not in rendered
 
@@ -71,9 +78,7 @@ def test_doctor_human_output_is_grouped_and_actionable(monkeypatch, tmp_path: Pa
 def test_doctor_human_output_shows_setup_source(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
-    config_path = tmp_path / "config.toml"
-    config_path.write_text('approval = "on-request"\n', encoding="utf-8")
-    monkeypatch.setattr("agentforge_harness.cli.doctor.get_system_config_path", lambda: config_path)
+    _with_saved_config(monkeypatch, tmp_path)
     output = io.StringIO()
     console = Console(file=output, theme=AGENT_THEME, width=120, color_system=None)
 
@@ -104,14 +109,16 @@ def test_doctor_human_output_shows_defaults_when_no_config_file(monkeypatch, tmp
     print_doctor_report(report, console=console)
 
     rendered = output.getvalue()
-    assert "Setup source: no saved config" in rendered
-    assert "Run agentforge init" in rendered
+    assert "AgentForge is not initialized." in rendered
+    assert "Run agentforge init first" in rendered
+    assert "Provider" not in rendered
 
 
 def test_doctor_reports_missing_api_key(monkeypatch, tmp_path: Path):
     for env_name in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"):
         monkeypatch.setenv(env_name, "")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    _with_saved_config(monkeypatch, tmp_path)
 
     report = build_doctor_report(Config(cwd=tmp_path))
 
@@ -123,6 +130,7 @@ def test_doctor_reports_missing_api_key(monkeypatch, tmp_path: Path):
 def test_doctor_reports_mcp_trust_warning_and_missing_command(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    _with_saved_config(monkeypatch, tmp_path)
     config = Config(
         cwd=tmp_path,
         model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o-mini"),
@@ -144,6 +152,7 @@ def test_doctor_reports_mcp_trust_warning_and_missing_command(monkeypatch, tmp_p
 def test_doctor_warns_for_risky_safety_settings(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    _with_saved_config(monkeypatch, tmp_path)
     config = Config(
         cwd=tmp_path,
         model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o-mini"),
@@ -164,6 +173,7 @@ def test_doctor_warns_for_risky_safety_settings(monkeypatch, tmp_path: Path):
 def test_doctor_warns_when_workspace_env_is_not_gitignored(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    _with_saved_config(monkeypatch, tmp_path)
     env_path = tmp_path / ".env"
     env_path.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
     os.chmod(env_path, 0o644)
@@ -183,6 +193,7 @@ def test_doctor_warns_when_workspace_env_is_not_gitignored(monkeypatch, tmp_path
 def test_doctor_errors_when_workspace_env_is_tracked(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    _with_saved_config(monkeypatch, tmp_path)
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.DEVNULL)
     env_path = tmp_path / ".env"
     env_path.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
@@ -246,6 +257,7 @@ def test_doctor_detects_project_config_without_permission_warning(monkeypatch, t
 def test_doctor_ok_when_env_is_gitignored(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    _with_saved_config(monkeypatch, tmp_path)
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.DEVNULL)
     (tmp_path / ".gitignore").write_text(".env\n", encoding="utf-8")
     env_path = tmp_path / ".env"
@@ -265,6 +277,7 @@ def test_doctor_ok_when_env_is_gitignored(monkeypatch, tmp_path: Path):
 def test_doctor_warns_for_mcp_cwd_outside_workspace(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    _with_saved_config(monkeypatch, tmp_path)
     outside = tmp_path.parent / "outside-mcp"
     outside.mkdir(exist_ok=True)
     config = Config(
@@ -282,6 +295,12 @@ def test_doctor_warns_for_mcp_cwd_outside_workspace(monkeypatch, tmp_path: Path)
 
 def test_agentforge_doctor_cli_json_smoke(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    project_config = tmp_path / ".agentforge" / "config.toml"
+    project_config.parent.mkdir()
+    project_config.write_text(
+        '[model]\nprovider = "openrouter"\nname = "openrouter/free"\n',
+        encoding="utf-8",
+    )
 
     result = CliRunner().invoke(
         cli,
@@ -302,6 +321,12 @@ def test_agentforge_doctor_cli_json_smoke(monkeypatch, tmp_path: Path):
 
 def test_agentforge_doctor_cli_fails_on_missing_key(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    project_config = tmp_path / ".agentforge" / "config.toml"
+    project_config.parent.mkdir()
+    project_config.write_text(
+        '[model]\nprovider = "openrouter"\nname = "openrouter/free"\n',
+        encoding="utf-8",
+    )
 
     result = CliRunner().invoke(
         cli,
@@ -318,3 +343,25 @@ def test_agentforge_doctor_cli_fails_on_missing_key(monkeypatch, tmp_path: Path)
     payload = json.loads(result.output)
     assert payload["ok"] is False
     assert "No API key found" in result.output
+
+
+def test_agentforge_doctor_cli_fails_fast_when_setup_is_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+
+    result = CliRunner().invoke(
+        cli,
+        ["doctor", "--cwd", str(tmp_path), "--json"],
+        env={
+            "OPENROUTER_API_KEY": "sk-or-v1-test",
+            "OPENAI_API_KEY": "",
+            "ANTHROPIC_API_KEY": "",
+            "API_KEY": "",
+        },
+    )
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    checks = {check["name"]: check for check in payload["checks"]}
+    assert payload["ok"] is False
+    assert checks["config.files"]["status"] == "error"
+    assert "provider.key" not in checks

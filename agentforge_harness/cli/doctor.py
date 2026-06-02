@@ -56,8 +56,12 @@ def build_doctor_report(config: Config) -> DoctorReport:
     checks: list[DoctorCheck] = []
 
     checks.extend(_check_package())
+    config_file_checks = _check_config_files(config)
+    checks.extend(config_file_checks)
+    if _requires_initial_setup(config_file_checks):
+        return DoctorReport(checks=checks)
+
     checks.extend(_check_config(config))
-    checks.extend(_check_config_files(config))
     checks.extend(_check_provider(config))
     checks.extend(_check_cwd(config))
     checks.extend(_check_workspace_paths(config))
@@ -67,6 +71,10 @@ def build_doctor_report(config: Config) -> DoctorReport:
     checks.extend(_check_safety(config))
 
     return DoctorReport(checks=checks)
+
+
+def _requires_initial_setup(checks: list[DoctorCheck]) -> bool:
+    return any(check.name == "config.files" and check.status == "error" for check in checks)
 
 
 def print_doctor_report(
@@ -101,6 +109,9 @@ def _status_marker(status: str) -> tuple[str, str]:
 
 
 def _doctor_compact_body(report: DoctorReport, border_style: str) -> Text:
+    if _report_requires_initial_setup(report):
+        return _doctor_initial_setup_body(report)
+
     error_count = sum(1 for check in report.checks if check.status == "error")
     warning_count = sum(1 for check in report.checks if check.status == "warn")
     ok_count = sum(1 for check in report.checks if check.status == "ok")
@@ -132,6 +143,24 @@ def _doctor_compact_body(report: DoctorReport, border_style: str) -> Text:
         if index != len(sections) - 1:
             text.append("\n")
 
+    return text
+
+
+def _report_requires_initial_setup(report: DoctorReport) -> bool:
+    return any(check.name == "config.files" and check.status == "error" for check in report.checks)
+
+
+def _doctor_initial_setup_body(report: DoctorReport) -> Text:
+    error_count = sum(1 for check in report.checks if check.status == "error")
+    ok_count = sum(1 for check in report.checks if check.status == "ok")
+
+    text = Text()
+    text.append("AgentForge is not initialized.\n", style="error")
+    text.append(f"{ok_count} ok, 0 warning(s), {error_count} error(s)\n\n", style="code")
+    text.append("Run agentforge init first, then run agentforge doctor again.\n\n", style="error")
+    text.append("ERROR Setup\n", style="error")
+    text.append("  ERROR config.files - No saved AgentForge config found\n", style="error")
+    text.append("        fix: Run agentforge init\n", style="warning")
     return text
 
 
@@ -354,9 +383,9 @@ def _check_config_files(config: Config) -> list[DoctorCheck]:
     return [
         DoctorCheck(
             name="config.files",
-            status="warn",
+            status="error",
             message="No config.toml file found",
-            detail="Defaults are in use; run agentforge init for a saved config",
+            detail="Run agentforge init to create a saved setup",
         )
     ]
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentforge-harness"
-version = "0.1.1"
+version = "0.1.2"
 description = "An open-source agentic coding harness for building and studying AI coding agents"
 readme = "README.MD"
 requires-python = ">=3.10"
