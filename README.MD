@@ -42,6 +42,8 @@ agentforge --version
 agentforge doctor
 ```
 
+Full setup guide: [docs/getting-started.md](docs/getting-started.md).
+
 ## Architecture
 
 ```mermaid
@@ -834,11 +836,19 @@ python3 -m py_compile agentforge_harness/agent/agent.py agentforge_harness/tools
 
 Extension examples:
 
+- [Documentation index](docs/README.md)
+- [Getting started](docs/getting-started.md)
+- [Architecture](docs/architecture.md)
+- [Configuration](docs/configuration.md)
+- [CLI reference](docs/cli.md)
+- [Skills](docs/skills.md)
+- [Persistence](docs/persistence.md)
 - [Extending AgentForge](docs/extensions.md)
 - [Provider setup](docs/providers.md)
 - [Security model](SECURITY.md)
 - [Tool reliability standard](docs/tool-reliability.md)
 - [Release checklist](docs/release.md)
+- [Manual pre-release test](docs/manual-testing.md)
 - [Examples index](examples/README.md)
 - [Custom tool example](examples/custom_tool.py)
 - [Skill example](examples/skills/api-interface-design/SKILL.md)

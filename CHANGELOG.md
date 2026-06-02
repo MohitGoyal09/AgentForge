@@ -10,6 +10,7 @@
 - Setup wizard overwrite protection, provider-specific hints, and optional local doctor check.
 - Provider and setup tests covering config resolution, Anthropic conversion, and generated TOML shape.
 - Provider setup docs, security model docs, release smoke script, and runnable examples index.
+- Expanded documentation for getting started, architecture, configuration, CLI commands, skills, persistence, and manual pre-release testing.
 - Read-only `git_diff` tool for structured repository diff inspection.
 - `agentforge doctor` and `/doctor` health checks with optional JSON output.
 - `agentforge report` command and `/report --json` for saved-session reporting without model calls.

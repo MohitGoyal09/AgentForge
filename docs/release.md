@@ -8,6 +8,7 @@ This checklist is for publishing AgentForge as the `agentforge-harness` Python p
 - Confirm the changelog has one current release section.
 - Confirm `.env`, `.agentforge/config.toml`, local sessions, checkpoints, caches, and test artifacts are not included in the package.
 - Run `agentforge doctor` in a fresh or isolated config environment.
+- Run the [manual pre-release test](manual-testing.md) at least once for the release candidate.
 
 ## Local Verification
 
@@ -81,3 +82,16 @@ python3 -m twine upload dist/*
 - Verify `pip install agentforge-harness` in a clean environment.
 - Run `agentforge init`, `agentforge doctor`, and `agentforge --help`.
 - Open a follow-up issue for any known post-v1 work instead of hiding it in the release notes.
+
+## Documentation Final Check
+
+Before publishing, skim these docs as a first-time user:
+
+- [Getting Started](getting-started.md)
+- [CLI Reference](cli.md)
+- [Configuration](configuration.md)
+- [Provider Setup](providers.md)
+- [Skills](skills.md)
+- [Persistence](persistence.md)
+- [Security Model](../SECURITY.md)
+- [Tool Reliability Standard](tool-reliability.md)
