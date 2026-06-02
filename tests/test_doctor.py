@@ -68,6 +68,46 @@ def test_doctor_human_output_is_grouped_and_actionable(monkeypatch, tmp_path: Pa
     assert "Doctor Checks" not in rendered
 
 
+def test_doctor_human_output_shows_setup_source(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('approval = "on-request"\n', encoding="utf-8")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_system_config_path", lambda: config_path)
+    output = io.StringIO()
+    console = Console(file=output, theme=AGENT_THEME, width=120, color_system=None)
+
+    report = build_doctor_report(
+        Config(
+            cwd=tmp_path,
+            model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o-mini"),
+        )
+    )
+    print_doctor_report(report, console=console)
+
+    rendered = output.getvalue()
+    assert "Setup source: user config" in rendered
+    assert "config.toml" in rendered
+
+
+def test_doctor_human_output_shows_defaults_when_no_config_file(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    monkeypatch.setattr(
+        "agentforge_harness.cli.doctor.get_system_config_path",
+        lambda: tmp_path / "missing-config.toml",
+    )
+    output = io.StringIO()
+    console = Console(file=output, theme=AGENT_THEME, width=120, color_system=None)
+
+    report = build_doctor_report(Config(cwd=tmp_path))
+    print_doctor_report(report, console=console)
+
+    rendered = output.getvalue()
+    assert "Setup source: no saved config" in rendered
+    assert "Run agentforge init" in rendered
+
+
 def test_doctor_reports_missing_api_key(monkeypatch, tmp_path: Path):
     for env_name in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"):
         monkeypatch.setenv(env_name, "")

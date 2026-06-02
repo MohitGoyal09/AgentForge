@@ -121,6 +121,9 @@ def _doctor_compact_body(report: DoctorReport, border_style: str) -> Text:
         f"{ok_count} ok, {warning_count} warning(s), {error_count} error(s)\n\n",
         style="code",
     )
+    setup_source = _setup_source_line(report)
+    if setup_source:
+        text.append(setup_source + "\n\n", style="muted")
     text.append(next_step + "\n\n", style="muted")
 
     sections = _doctor_sections(report)
@@ -130,6 +133,18 @@ def _doctor_compact_body(report: DoctorReport, border_style: str) -> Text:
             text.append("\n")
 
     return text
+
+
+def _setup_source_line(report: DoctorReport) -> str | None:
+    source = next((check for check in report.checks if check.name == "config.source"), None)
+    if source:
+        return f"Setup source: {source.message} ({source.detail})"
+
+    missing_files = next((check for check in report.checks if check.name == "config.files"), None)
+    if missing_files:
+        return "Setup source: no saved config; defaults and environment variables are in use."
+
+    return None
 
 
 def _doctor_sections(report: DoctorReport) -> list[tuple[str, list[DoctorCheck]]]:
@@ -301,10 +316,13 @@ def _check_config_files(config: Config) -> list[DoctorCheck]:
     checks: list[DoctorCheck] = []
     system_config = get_system_config_path()
     project_config = config.cwd / ".agentforge" / "config.toml"
+    source_paths: list[Path] = []
 
     if system_config.exists():
+        source_paths.append(system_config)
         checks.append(_file_permission_check("config.system", system_config, recommended_private=True))
     if project_config.exists():
+        source_paths.append(project_config)
         checks.append(
             DoctorCheck(
                 name="config.project",
@@ -315,6 +333,22 @@ def _check_config_files(config: Config) -> list[DoctorCheck]:
         )
 
     if checks:
+        if system_config.exists() and project_config.exists():
+            message = "user config with project overrides"
+        elif project_config.exists():
+            message = "project config"
+        else:
+            message = "user config"
+
+        checks.insert(
+            0,
+            DoctorCheck(
+                name="config.source",
+                status="ok",
+                message=message,
+                detail=" + ".join(str(path) for path in source_paths),
+            ),
+        )
         return checks
 
     return [
