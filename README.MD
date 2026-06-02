@@ -1,4 +1,15 @@
+<p align="center">
+  <img src="docs/assets/agentforge-banner.png" alt="AgentForge pixel-art banner" width="100%">
+</p>
+
 # AgentForge
+
+<p align="center">
+  <a href="https://pypi.org/project/agentforge-harness/"><img alt="PyPI" src="https://img.shields.io/pypi/v/agentforge-harness?color=3775a9"></a>
+  <a href="https://pypi.org/project/agentforge-harness/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/agentforge-harness"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-green"></a>
+  <a href="docs/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-ready-6aa6f8"></a>
+</p>
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
 
