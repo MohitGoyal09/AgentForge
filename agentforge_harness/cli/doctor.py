@@ -196,9 +196,9 @@ def _append_compact_section(text: Text, title: str, checks: list[DoctorCheck]) -
         text.append(f"  {marker:<5} ", style=marker_style)
         text.append(check.name, style="code")
         text.append(f" - {_truncate(check.message)}\n", style="assistant")
-        if check.detail:
-            text.append(f"        detail: {_truncate(check.detail)}\n", style="muted")
         fix_hint = _fix_hint(check)
+        if check.detail and _normalize_for_compare(check.detail) != _normalize_for_compare(fix_hint or ""):
+            text.append(f"        detail: {_truncate(check.detail)}\n", style="muted")
         if fix_hint:
             text.append(f"        fix: {_truncate(fix_hint)}\n", style="warning")
 
@@ -208,6 +208,10 @@ def _truncate(value: str, limit: int = 96) -> str:
     if len(compact) <= limit:
         return compact
     return compact[: limit - 1].rstrip() + "..."
+
+
+def _normalize_for_compare(value: str) -> str:
+    return " ".join(value.rstrip(".").lower().split())
 
 
 def _worst_status(checks: list[DoctorCheck]) -> str:
@@ -235,14 +239,12 @@ def _fix_hint(check: DoctorCheck) -> str | None:
         return "Run chmod 600 on the config file."
     if check.name == "data_dir":
         return "Check directory permissions or run with a writable HOME/AgentForge data directory."
-    if check.name == "safety.env.permissions":
-        return "Run chmod 600 .env."
     if check.name == "safety.env.git":
         return "Remove .env from git tracking and rotate any exposed keys."
     if check.name == "safety.env.gitignore":
         return "Add .env to .gitignore."
     if check.name == "mcp.trust":
-        return "Only configure MCP servers you trust; AgentForge does not sandbox them yet."
+        return "Only enable MCP servers you trust. Sandboxing is not available yet."
     if check.name.startswith("mcp.") and "not found" in check.message.lower():
         return "Install the command, fix the MCP config, or disable this server."
     if check.name.startswith("paths."):
@@ -297,15 +299,20 @@ def _check_config(config: Config) -> list[DoctorCheck]:
 
 def _check_config_files(config: Config) -> list[DoctorCheck]:
     checks: list[DoctorCheck] = []
-    paths = [
-        ("config.system", get_system_config_path()),
-        ("config.project", config.cwd / ".agentforge" / "config.toml"),
-    ]
+    system_config = get_system_config_path()
+    project_config = config.cwd / ".agentforge" / "config.toml"
 
-    for name, path in paths:
-        if not path.exists():
-            continue
-        checks.append(_file_permission_check(name, path, recommended_private=True))
+    if system_config.exists():
+        checks.append(_file_permission_check("config.system", system_config, recommended_private=True))
+    if project_config.exists():
+        checks.append(
+            DoctorCheck(
+                name="config.project",
+                status="ok",
+                message="Project config found",
+                detail=str(project_config),
+            )
+        )
 
     if checks:
         return checks
@@ -550,8 +557,8 @@ def _check_mcp(config: Config) -> list[DoctorCheck]:
         DoctorCheck(
             name="mcp.trust",
             status="warn",
-            message="MCP servers are trusted executable integrations",
-            detail="AgentForge does not sandbox MCP servers yet",
+            message="MCP servers can run external commands",
+            detail="Configured MCP servers run with your local user permissions",
         )
     ]
 
@@ -636,7 +643,6 @@ def _check_safety(config: Config) -> list[DoctorCheck]:
 
 def _check_env_file(env_path: Path, cwd: Path) -> list[DoctorCheck]:
     checks: list[DoctorCheck] = []
-    checks.append(_file_permission_check("safety.env.permissions", env_path, recommended_private=True))
 
     if _is_git_tracked(env_path, cwd):
         checks.append(
@@ -694,8 +700,8 @@ def _file_permission_check(name: str, path: Path, recommended_private: bool) -> 
         return DoctorCheck(
             name=name,
             status="warn",
-            message=f"{path.name} is readable or writable by group/other users",
-            detail=f"mode={oct(mode)}; recommended=0o600",
+            message=f"{path.name} should use private permissions",
+            detail=f"current={oct(mode)}; recommended=0o600",
         )
 
     return DoctorCheck(

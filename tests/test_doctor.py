@@ -97,6 +97,8 @@ def test_doctor_reports_mcp_trust_warning_and_missing_command(monkeypatch, tmp_p
     assert report.has_errors
     assert statuses["mcp.trust"] == "warn"
     assert statuses["mcp.missing"] == "error"
+    assert any("MCP servers can run external commands" in check.message for check in report.checks)
+    assert any("local user permissions" in check.detail for check in report.checks)
 
 
 def test_doctor_warns_for_risky_safety_settings(monkeypatch, tmp_path: Path):
@@ -119,7 +121,7 @@ def test_doctor_warns_for_risky_safety_settings(monkeypatch, tmp_path: Path):
     assert statuses["safety.prompt_injection"] == "warn"
 
 
-def test_doctor_warns_for_permissive_workspace_env(monkeypatch, tmp_path: Path):
+def test_doctor_warns_when_workspace_env_is_not_gitignored(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
     env_path = tmp_path / ".env"
@@ -133,7 +135,7 @@ def test_doctor_warns_for_permissive_workspace_env(monkeypatch, tmp_path: Path):
 
     statuses = _statuses(build_doctor_report(config))
 
-    assert statuses["safety.env.permissions"] == "warn"
+    assert "safety.env.permissions" not in statuses
     assert statuses["safety.env.git"] == "ok"
     assert statuses["safety.env.gitignore"] == "warn"
 
@@ -156,7 +158,7 @@ def test_doctor_errors_when_workspace_env_is_tracked(monkeypatch, tmp_path: Path
     statuses = _statuses(report)
 
     assert report.has_errors
-    assert statuses["safety.env.permissions"] == "ok"
+    assert "safety.env.permissions" not in statuses
     assert statuses["safety.env.git"] == "error"
 
 
@@ -176,6 +178,29 @@ def test_doctor_reports_config_file_permissions(monkeypatch, tmp_path: Path):
     statuses = _statuses(build_doctor_report(config))
 
     assert statuses["config.system"] == "warn"
+
+
+def test_doctor_detects_project_config_without_permission_warning(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    monkeypatch.setattr(
+        "agentforge_harness.cli.doctor.get_system_config_path",
+        lambda: tmp_path / "missing-system-config.toml",
+    )
+    project_config = tmp_path / ".agentforge" / "config.toml"
+    project_config.parent.mkdir()
+    project_config.write_text('approval = "on-request"\n', encoding="utf-8")
+    os.chmod(project_config, 0o644)
+
+    config = Config(
+        cwd=tmp_path,
+        model=ModelConfig(provider=ModelProvider.OPENAI, name="gpt-4o-mini"),
+    )
+
+    statuses = _statuses(build_doctor_report(config))
+
+    assert statuses["config.project"] == "ok"
+    assert "config.files" not in statuses
 
 
 def test_doctor_ok_when_env_is_gitignored(monkeypatch, tmp_path: Path):
