@@ -34,6 +34,8 @@ Confirm:
 
 - config is created
 - API key guidance is clear
+- hosted providers do not ask for a base URL
+- custom provider asks for base URL before API key
 - doctor output is understandable
 - no private machine paths leak into generated config
 

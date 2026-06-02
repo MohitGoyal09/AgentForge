@@ -11,7 +11,11 @@ except ModuleNotFoundError:
     import tomli as tomllib
 
 from agentforge_harness.cli.run import cli
-from agentforge_harness.cli.setup import _write_config_file, _write_env_file
+from agentforge_harness.cli.setup import (
+    _resolve_provider_choice,
+    _write_config_file,
+    _write_env_file,
+)
 
 
 def test_setup_config_writes_top_level_approval(tmp_path: Path):
@@ -71,7 +75,7 @@ def test_agentforge_init_smoke_writes_provider_files(monkeypatch, tmp_path: Path
     result = CliRunner().invoke(
         cli,
         ["init"],
-        input="openai\n\n\nn\n",
+        input="openai\n\nn\n",
     )
 
     assert result.exit_code == 0
@@ -86,6 +90,35 @@ def test_agentforge_init_smoke_writes_provider_files(monkeypatch, tmp_path: Path
     assert config["model"]["provider"] == "openai"
     assert config["model"]["name"] == "gpt-4o-mini"
     assert "base_url" not in config["model"]
+
+
+def test_agentforge_init_openrouter_sets_default_base_url(monkeypatch, tmp_path: Path):
+    config_dir = tmp_path / "agentforge-config"
+    monkeypatch.setattr("agentforge_harness.cli.setup.get_config_dir", lambda: config_dir)
+    monkeypatch.setattr("getpass.getpass", lambda prompt="", stream=None: "sk-openrouter-test")
+
+    result = CliRunner().invoke(
+        cli,
+        ["init"],
+        input="1\n\nn\n",
+    )
+
+    assert result.exit_code == 0
+    env_text = (config_dir / ".env").read_text(encoding="utf-8")
+    assert "OPENROUTER_API_KEY=sk-openrouter-test" in env_text
+    assert "OPENROUTER_BASE_URL=https://openrouter.ai/api/v1" in env_text
+
+    config = tomllib.loads((config_dir / "config.toml").read_text(encoding="utf-8"))
+    assert config["model"]["provider"] == "openrouter"
+    assert config["model"]["base_url"] == "https://openrouter.ai/api/v1"
+
+
+def test_provider_choice_accepts_numbers_and_names():
+    assert _resolve_provider_choice("1") == "openrouter"
+    assert _resolve_provider_choice("2") == "openai"
+    assert _resolve_provider_choice("anthropic") == "anthropic"
+    assert _resolve_provider_choice("Custom OpenAI-compatible") == "custom"
+    assert _resolve_provider_choice("google") is None
 
 
 def test_agentforge_init_cancel_preserves_existing_files(monkeypatch, tmp_path: Path):
@@ -120,7 +153,7 @@ def test_agentforge_init_overwrites_existing_files_when_confirmed(monkeypatch, t
     )
 
     assert result.exit_code == 0
-    assert "custom settings" in result.output
+    assert "Custom OpenAI-compatible settings" in result.output
     env_text = (config_dir / ".env").read_text(encoding="utf-8")
     assert "API_KEY=sk-custom-test" in env_text
     assert "BASE_URL=http://localhost:11434/v1" in env_text

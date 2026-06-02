@@ -1,13 +1,19 @@
 from pathlib import Path
 import os
-from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.panel import Panel
 from rich.text import Text
 from rich import box
 from agentforge_harness.config.loader import get_config_dir
+from agentforge_harness.ui.tui import get_console
 
 PROVIDERS = ("openrouter", "openai", "anthropic", "custom")
+PROVIDER_LABELS = {
+    "openrouter": "OpenRouter",
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "custom": "Custom OpenAI-compatible",
+}
 DEFAULT_MODELS = {
     "openrouter": "minimax/minimax-m2.5:free",
     "openai": "gpt-4o-mini",
@@ -35,23 +41,23 @@ BASE_URL_ENV = {
 PROVIDER_HINTS = {
     "openrouter": (
         "OpenRouter routes through an OpenAI-compatible API. Model names usually look "
-        "like provider/model, for example openai/gpt-4o-mini."
+        "like provider/model, for example openai/gpt-4o-mini. AgentForge sets the "
+        "OpenRouter base URL automatically."
     ),
     "openai": (
-        "OpenAI uses the native OpenAI SDK path. Leave Base URL empty unless you are "
-        "intentionally using an OpenAI-compatible proxy."
+        "OpenAI uses the native OpenAI SDK path. The SDK default base URL is used."
     ),
     "anthropic": (
-        "Anthropic uses the native Anthropic SDK path. Leave Base URL empty for the "
-        "hosted Anthropic API."
+        "Anthropic uses the native Anthropic SDK path. The SDK default base URL is used."
     ),
     "custom": (
         "Custom providers must expose an OpenAI-compatible /v1 API, such as Ollama, "
-        "vLLM, LM Studio, or another local gateway."
+        "vLLM, LM Studio, or another local gateway. AgentForge asks for the base URL "
+        "before the API key for custom providers."
     ),
 }
 
-console = Console()
+console = get_console()
 
 
 def _write_env_file(env_path: Path, provider: str, api_key: str, base_url: str) -> None:
@@ -104,6 +110,45 @@ def _provider_help(provider: str) -> str:
     )
 
 
+def _provider_menu_text() -> str:
+    lines = ["Choose a model provider:\n"]
+    for index, provider in enumerate(PROVIDERS, start=1):
+        label = PROVIDER_LABELS[provider]
+        model = DEFAULT_MODELS[provider]
+        lines.append(f"{index}. {label} - default model: {model}")
+    lines.append("")
+    lines.append("Google/Gemini is planned later, but is not in this release yet.")
+    return "\n".join(lines)
+
+
+def _resolve_provider_choice(choice: str) -> str | None:
+    normalized = choice.strip().lower()
+    if normalized.isdigit():
+        index = int(normalized)
+        if 1 <= index <= len(PROVIDERS):
+            return PROVIDERS[index - 1]
+    for provider in PROVIDERS:
+        if normalized in {provider, PROVIDER_LABELS[provider].lower()}:
+            return provider
+    return None
+
+
+def _ask_provider() -> str:
+    choices = [str(index) for index in range(1, len(PROVIDERS) + 1)]
+    choices.extend(PROVIDERS)
+    provider_choice = Prompt.ask("Provider number or name", choices=choices, default="1")
+    provider = _resolve_provider_choice(provider_choice)
+    if provider is None:
+        raise RuntimeError(f"Unknown provider selection: {provider_choice}")
+    return provider
+
+
+def _hosted_base_url(provider: str) -> str:
+    if provider == "custom":
+        raise ValueError("Custom provider base URL must be entered by the user")
+    return DEFAULT_BASE_URLS[provider]
+
+
 def run_setup() -> bool:
     config_dir = get_config_dir()
     env_path = config_dir / ".env"
@@ -115,10 +160,9 @@ def run_setup() -> bool:
             Text(
                 "Welcome to AgentForge!\n\n"
                 "You need an API key to use LLM-powered features.\n"
-                "Choose the provider you want the harness to call. OpenRouter\n"
-                "is the default because it can route to many models, OpenAI\n"
-                "and Anthropic use their native SDK paths, and custom means an\n"
-                "OpenAI-compatible endpoint such as a local server.\n\n"
+                "Choose the provider you want the harness to call. Hosted\n"
+                "providers only ask for an API key and model. Custom providers\n"
+                "ask for a base URL first, then the API key.\n\n"
                 "Provider keys:\n"
                 "- OpenRouter: https://openrouter.ai/keys\n"
                 "- OpenAI: https://platform.openai.com/api-keys\n"
@@ -155,33 +199,44 @@ def run_setup() -> bool:
             console.print("[warning]Setup cancelled. Existing files were left unchanged.[/warning]")
             return False
 
-    provider = Prompt.ask(
-        "Provider",
-        choices=list(PROVIDERS),
-        default="openrouter",
+    console.print(
+        Panel(
+            Text(_provider_menu_text(), style="code"),
+            title=Text("Provider", style="bold cyan"),
+            border_style="cyan",
+            box=box.ROUNDED,
+            padding=(1, 2),
+        )
     )
-    default_base_url = DEFAULT_BASE_URLS[provider]
+    provider = _ask_provider()
     default_model = DEFAULT_MODELS[provider]
 
     console.print(
         Panel(
             Text(_provider_help(provider), style="code"),
-            title=Text(f"{provider} settings", style="bold cyan"),
+            title=Text(f"{PROVIDER_LABELS[provider]} settings", style="bold cyan"),
             border_style="cyan",
             box=box.ROUNDED,
             padding=(1, 2),
         )
     )
 
+    if provider == "custom":
+        base_url = Prompt.ask(
+            "Base URL",
+            default=DEFAULT_BASE_URLS[provider],
+        ).strip()
+        if not base_url:
+            console.print("[error]Base URL is required for custom providers.[/error]")
+            return False
+    else:
+        base_url = _hosted_base_url(provider)
+
     api_key = Prompt.ask("API key", password=True)
     if not api_key:
         console.print("[error]API key is required.[/error]")
         return False
 
-    base_url = Prompt.ask(
-        "Base URL",
-        default=default_base_url,
-    ).strip()
     model = Prompt.ask("Default model", default=default_model)
 
     _write_env_file(env_path, provider, api_key, base_url)
@@ -194,12 +249,12 @@ def run_setup() -> bool:
                 f"Secrets saved to: {env_path}\n"
                 f"Config saved to: {config_path}\n\n"
                 f"Provider: {provider}\n"
-                f"API key: [green]configured[/green]\n"
+                f"API key: configured\n"
                 f"Base URL: {base_url or 'provider default'}\n"
                 f"Model: {model}\n\n"
                 "You can change these later by editing the file above,\n"
-                "setting environment variables, or running [bold]agentforge init[/bold] again.\n"
-                "Run [bold]agentforge doctor[/bold] next to verify the setup.",
+                "setting environment variables, or running agentforge init again.\n"
+                "Run agentforge doctor next to verify the setup.",
                 style="code",
             ),
             title=Text("Setup complete", style="bold green"),

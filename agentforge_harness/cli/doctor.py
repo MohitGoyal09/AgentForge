@@ -12,7 +12,6 @@ from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 
 from agentforge_harness.config.config import ApprovalPolicy, Config
@@ -80,34 +79,15 @@ def print_doctor_report(
         console.file.write(json.dumps(report.to_dict(), indent=2) + "\n")
         return
 
-    table = Table(
-        show_header=True,
-        header_style="highlight",
-        expand=True,
-    )
-    table.add_column("Status", no_wrap=True)
-    table.add_column("Check", style="code", no_wrap=True)
-    table.add_column("Message", overflow="fold")
-    table.add_column("Detail", style="muted", overflow="fold")
-
-    for check in report.checks:
-        marker, style = _status_marker(check.status)
-        table.add_row(
-            Text(marker, style=style),
-            check.name,
-            check.message,
-            check.detail,
-        )
-
-    title = "Doctor"
     border_style = "error" if report.has_errors else "warning" if report.has_warnings else "success"
     console.print(
         Panel(
-            table,
-            title=Text(title, style=border_style),
+            _doctor_compact_body(report, border_style),
+            title=Text("Doctor", style=border_style),
             title_align="left",
             border_style=border_style,
             padding=(1, 2),
+            width=min(console.width, 110),
         )
     )
 
@@ -118,6 +98,162 @@ def _status_marker(status: str) -> tuple[str, str]:
     if status == "warn":
         return "WARN", "warning"
     return "ERROR", "error"
+
+
+def _doctor_compact_body(report: DoctorReport, border_style: str) -> Text:
+    error_count = sum(1 for check in report.checks if check.status == "error")
+    warning_count = sum(1 for check in report.checks if check.status == "warn")
+    ok_count = sum(1 for check in report.checks if check.status == "ok")
+
+    if error_count:
+        headline = "AgentForge is not ready yet."
+        next_step = "Fix the errors below, then run agentforge doctor again."
+    elif warning_count:
+        headline = "AgentForge can run, but a few things need attention."
+        next_step = "Warnings are usually safe for local testing, but review them before release."
+    else:
+        headline = "AgentForge looks ready."
+        next_step = "You can start the TUI with agentforge."
+
+    text = Text()
+    text.append(headline + "\n", style=border_style)
+    text.append(
+        f"{ok_count} ok, {warning_count} warning(s), {error_count} error(s)\n\n",
+        style="code",
+    )
+    text.append(next_step + "\n\n", style="muted")
+
+    sections = _doctor_sections(report)
+    for index, (title, checks) in enumerate(sections):
+        _append_compact_section(text, title, checks)
+        if index != len(sections) - 1:
+            text.append("\n")
+
+    return text
+
+
+def _doctor_sections(report: DoctorReport) -> list[tuple[str, list[DoctorCheck]]]:
+    groups = [
+        ("Setup", ("package", "config", "config.")),
+        ("Provider", ("provider.",)),
+        ("Workspace", ("cwd", "paths.", "data_dir")),
+        ("Skills", ("skills", "skills.")),
+        ("MCP", ("mcp", "mcp.")),
+        ("Safety", ("safety.",)),
+    ]
+
+    sections: list[tuple[str, list[DoctorCheck]]] = []
+    assigned: set[int] = set()
+    for title, prefixes in groups:
+        checks = [
+            check
+            for index, check in enumerate(report.checks)
+            if index not in assigned and _matches_group(check.name, prefixes)
+        ]
+        if not checks:
+            continue
+        check_ids = {id(check) for check in checks}
+        for index, check in enumerate(report.checks):
+            if id(check) in check_ids:
+                assigned.add(index)
+        sections.append((title, checks))
+
+    remaining = [
+        check for index, check in enumerate(report.checks)
+        if index not in assigned
+    ]
+    if remaining:
+        sections.append(("Other", remaining))
+    return sections
+
+
+def _matches_group(name: str, prefixes: tuple[str, ...]) -> bool:
+    return any(name == prefix.rstrip(".") or name.startswith(prefix) for prefix in prefixes)
+
+
+def _append_compact_section(text: Text, title: str, checks: list[DoctorCheck]) -> None:
+    group_status = _worst_status(checks)
+    marker, marker_style = _status_marker(group_status)
+    ok_count = sum(1 for check in checks if check.status == "ok")
+    warning_count = sum(1 for check in checks if check.status == "warn")
+    error_count = sum(1 for check in checks if check.status == "error")
+
+    text.append(f"{marker:<5} ", style=marker_style)
+    text.append(title, style="highlight")
+    text.append(f"  {ok_count} ok")
+    if warning_count:
+        text.append(f", {warning_count} warn", style="warning")
+    if error_count:
+        text.append(f", {error_count} error", style="error")
+    text.append("\n")
+
+    visible_checks = [check for check in checks if check.status != "ok"]
+    if not visible_checks:
+        return
+
+    for check in visible_checks:
+        marker, marker_style = _status_marker(check.status)
+        text.append(f"  {marker:<5} ", style=marker_style)
+        text.append(check.name, style="code")
+        text.append(f" - {_truncate(check.message)}\n", style="assistant")
+        if check.detail:
+            text.append(f"        detail: {_truncate(check.detail)}\n", style="muted")
+        fix_hint = _fix_hint(check)
+        if fix_hint:
+            text.append(f"        fix: {_truncate(fix_hint)}\n", style="warning")
+
+
+def _truncate(value: str, limit: int = 96) -> str:
+    compact = " ".join(value.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 1].rstrip() + "..."
+
+
+def _worst_status(checks: list[DoctorCheck]) -> str:
+    statuses = {check.status for check in checks}
+    if "error" in statuses:
+        return "error"
+    if "warn" in statuses:
+        return "warn"
+    return "ok"
+
+
+def _fix_hint(check: DoctorCheck) -> str | None:
+    if check.status == "ok":
+        return None
+    if check.name == "provider.key":
+        return "Run agentforge init, or set the provider API key environment variable."
+    if check.name == "provider.base_url":
+        return "Set model.base_url in config.toml or BASE_URL in the environment."
+    if check.name in {"config.files", "config"}:
+        return "Run agentforge init, or edit the reported config file."
+    if check.name.startswith("config.") and (
+        "permissions" in check.message.lower()
+        or "readable or writable" in check.message.lower()
+    ):
+        return "Run chmod 600 on the config file."
+    if check.name == "data_dir":
+        return "Check directory permissions or run with a writable HOME/AgentForge data directory."
+    if check.name == "safety.env.permissions":
+        return "Run chmod 600 .env."
+    if check.name == "safety.env.git":
+        return "Remove .env from git tracking and rotate any exposed keys."
+    if check.name == "safety.env.gitignore":
+        return "Add .env to .gitignore."
+    if check.name == "mcp.trust":
+        return "Only configure MCP servers you trust; AgentForge does not sandbox them yet."
+    if check.name.startswith("mcp.") and "not found" in check.message.lower():
+        return "Install the command, fix the MCP config, or disable this server."
+    if check.name.startswith("paths."):
+        return "Prefer paths inside the workspace unless you intentionally trust the external path."
+    if check.name.startswith("skills."):
+        return "Create .agentforge/skills or ~/.agents/skills, or disable skills if unused."
+    if check.name == "safety.approval":
+        return 'Use approval = "on-request" for normal interactive work.'
+    if check.name.startswith("safety.") and "disabled" in check.message.lower():
+        return "Enable this safety flag in config.toml for normal use."
+    return None
 
 
 def _check_package() -> list[DoctorCheck]:

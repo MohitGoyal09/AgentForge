@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 import os
 import subprocess
 
 from click.testing import CliRunner
+from rich.console import Console
 
-from agentforge_harness.cli.doctor import build_doctor_report
+from agentforge_harness.cli.doctor import build_doctor_report, print_doctor_report
 from agentforge_harness.cli.run import cli
 from agentforge_harness.config.config import (
     ApprovalPolicy,
@@ -16,6 +18,7 @@ from agentforge_harness.config.config import (
     ModelConfig,
     ModelProvider,
 )
+from agentforge_harness.ui.tui import AGENT_THEME
 
 
 def _statuses(report):
@@ -43,6 +46,26 @@ def test_doctor_reports_ready_config(monkeypatch, tmp_path: Path):
     assert statuses["data_dir"] == "ok"
     assert statuses["skills.roots"] == "ok"
     assert statuses["safety.redaction"] == "ok"
+
+
+def test_doctor_human_output_is_grouped_and_actionable(monkeypatch, tmp_path: Path):
+    for env_name in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"):
+        monkeypatch.setenv(env_name, "")
+    monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    output = io.StringIO()
+    console = Console(file=output, theme=AGENT_THEME, width=100, color_system=None)
+
+    report = build_doctor_report(Config(cwd=tmp_path))
+    print_doctor_report(report, console=console)
+
+    rendered = output.getvalue()
+    assert "AgentForge is not ready yet." in rendered
+    assert "Setup" in rendered
+    assert "Provider" in rendered
+    assert "fix: Run agentforge init" in rendered
+    assert "detail:" in rendered
+    assert "Status" not in rendered
+    assert "Doctor Checks" not in rendered
 
 
 def test_doctor_reports_missing_api_key(monkeypatch, tmp_path: Path):

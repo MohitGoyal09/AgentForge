@@ -48,6 +48,10 @@ agentforge run "read this project and summarize the harness architecture"
 
 AgentForge needs one configured model provider. The setup wizard writes the project config and tells you which API key to set.
 
+For hosted providers such as OpenRouter, OpenAI, and Anthropic, the wizard asks for the provider, API key, and default model. It does not ask for a base URL. OpenRouter gets its default base URL automatically, while OpenAI and Anthropic use their SDK defaults.
+
+For custom OpenAI-compatible providers, the wizard asks for the base URL first, then the API key and model.
+
 Common keys:
 
 ```bash

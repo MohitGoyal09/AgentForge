@@ -8,6 +8,8 @@
 - Anthropic client adapter with message and tool-call conversion.
 - Setup wizard prompts for provider, model, and base URL.
 - Setup wizard overwrite protection, provider-specific hints, and optional local doctor check.
+- Setup wizard now uses a numbered provider menu, avoids hosted-provider base URL prompts, asks custom providers for base URL first, and uses the shared Rich theme.
+- Doctor output now uses a compact grouped health report with summary counts and fix hints instead of a dense wide table.
 - Provider and setup tests covering config resolution, Anthropic conversion, and generated TOML shape.
 - Provider setup docs, security model docs, release smoke script, and runnable examples index.
 - Expanded documentation for getting started, architecture, configuration, CLI commands, skills, persistence, and manual pre-release testing.

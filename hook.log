@@ -133,3 +133,4 @@
 [HOOK] {"timestamp": "2026-06-01T21:38:20.188733", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
 [HOOK] {"timestamp": "2026-06-01T21:38:24.760249", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "shell", "user_message": null, "error": null}
 [HOOK] {"timestamp": "2026-06-01T21:38:29.228840", "trigger": "before_tool", "cwd": "/Users/mohit/Code/claudecode", "tool_name": "read_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-06-02T12:50:54.020676", "trigger": "before_agent", "cwd": "/Users/mohit/Code/claudecode", "tool_name": null, "user_message": "hi", "error": null}

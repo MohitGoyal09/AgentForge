@@ -39,6 +39,8 @@ Supported providers:
 
 See [Provider Setup](providers.md) for examples.
 
+The setup wizard only asks for base URL when `provider = "custom"`. Hosted providers use their known defaults: OpenRouter receives `https://openrouter.ai/api/v1`, while OpenAI and Anthropic use their SDK defaults.
+
 ## Approval Modes
 
 ```toml
