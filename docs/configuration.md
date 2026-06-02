@@ -20,7 +20,7 @@ max_turns = 100
 
 [model]
 provider = "openrouter"
-name = "minimax/minimax-m2.5:free"
+name = "openrouter/free"
 temperature = 1.0
 context_window = 256000
 max_output_tokens = 4096

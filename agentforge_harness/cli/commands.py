@@ -38,7 +38,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /doctor /new /reload /version /plan /build /name /skills /tools /mcp /stats /report /todos /exit",
+                "commands: /help /doctor /model /new /reload /version /plan /build /name /skills /tools /mcp /stats /report /todos /exit",
             ],
             mode=AgentMode.BUILD.value,
         )
@@ -114,10 +114,31 @@ class CLI:
             return True
         if name == "/model":
             if not argument:
-                self.tui.show_notice(f"Current model: {self.config.model_name}", "Model")
+                self.tui.show_notice(
+                    "\n".join(
+                        [
+                            f"Current model: {self.config.model_name}",
+                            "Usage: /model <model-id>",
+                            "Example: /model openrouter/free",
+                        ]
+                    ),
+                    "Model",
+                )
             else:
-                self.config.model_name = argument
-                self.tui.show_notice(f"Model set to: {self.config.model_name}", "Model")
+                old_model = self.config.model_name
+                if self.agent and self.agent.session:
+                    self.agent.session.set_model_name(argument)
+                else:
+                    self.config.model_name = argument
+                self.tui.show_notice(
+                    "\n".join(
+                        [
+                            f"Model changed: {old_model} -> {self.config.model_name}",
+                            "This affects the current session. Use /reload to restore config.toml.",
+                        ]
+                    ),
+                    "Model",
+                )
             return True
         if name == "/approval":
             if not argument:

@@ -90,6 +90,19 @@ class Session:
         self.mode = mode
         self._refresh_mode()
 
+    def set_model_name(self, model_name: str) -> None:
+        self.config.model_name = model_name
+        self.circuit_breaker.reset(model_name)
+        if self.context_manager:
+            self.context_manager.set_model_name(model_name)
+            self.context_manager.refresh_system_prompt(
+                tools=self.tool_registry.get_tools(mode=self.mode),
+                mode=self.mode,
+                skills=self.skills_manager.list_skills(),
+                active_skills=self.active_skills,
+                active_skill_bodies=self.skills_manager.get_active_skill_bodies(self.active_skills),
+            )
+
     def _refresh_mode(self) -> None:
         if not self.context_manager:
             return

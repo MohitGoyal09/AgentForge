@@ -74,7 +74,7 @@ agentforge completion fish
 | `/history [n]` | Show recent messages |
 | `/config` | Show redacted config |
 | `/doctor` | Show doctor report |
-| `/model <name>` | Change model for this session |
+| `/model [name]` | Show or change the model for this session |
 | `/approval <mode>` | Change approval policy |
 | `/tools` | List registered tools |
 | `/skills` | List available skills |

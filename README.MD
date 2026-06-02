@@ -682,7 +682,7 @@ AgentForge supports these model providers:
 
 | Provider | SDK path | Typical model name |
 | --- | --- | --- |
-| `openrouter` | OpenAI-compatible | `minimax/minimax-m2.5:free` |
+| `openrouter` | OpenAI-compatible | `openrouter/free` |
 | `openai` | OpenAI SDK | `gpt-4o-mini` |
 | `anthropic` | Anthropic SDK | `claude-3-5-sonnet-latest` |
 | `custom` | OpenAI-compatible | `local/model` |
@@ -782,7 +782,7 @@ Interactive commands:
 | `/clear` | implemented | Clear conversation history |
 | `/config` | implemented | Show configuration (Rich Table) |
 | `/doctor` | implemented | Check config, provider keys, skill roots, MCP commands, and safety flags |
-| `/model <name>` | implemented | Change model for current session |
+| `/model [name]` | implemented | Show or change model for current session |
 | `/approval <mode>` | implemented | Change approval policy |
 | `/stats` | implemented | Show token/session stats |
 | `/todos` | implemented | Show active todos |

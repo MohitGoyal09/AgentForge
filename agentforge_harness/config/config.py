@@ -46,7 +46,7 @@ PROVIDER_BASE_URL_ENV: dict[ModelProvider, tuple[str, ...]] = {
 
 class ModelConfig(BaseModel):
     provider: ModelProvider = ModelProvider.OPENROUTER
-    name : str = "minimax/minimax-m2.5:free"
+    name : str = "openrouter/free"
     temperature: float = Field(default=1, ge=0.0, le=2.0)
     context_window: int = 256_000
     max_output_tokens: int = Field(default=4096, ge=1)

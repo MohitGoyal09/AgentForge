@@ -110,6 +110,7 @@ def test_agentforge_init_openrouter_sets_default_base_url(monkeypatch, tmp_path:
 
     config = tomllib.loads((config_dir / "config.toml").read_text(encoding="utf-8"))
     assert config["model"]["provider"] == "openrouter"
+    assert config["model"]["name"] == "openrouter/free"
     assert config["model"]["base_url"] == "https://openrouter.ai/api/v1"
 
 

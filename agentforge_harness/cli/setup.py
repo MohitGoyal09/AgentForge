@@ -15,7 +15,7 @@ PROVIDER_LABELS = {
     "custom": "Custom OpenAI-compatible",
 }
 DEFAULT_MODELS = {
-    "openrouter": "minimax/minimax-m2.5:free",
+    "openrouter": "openrouter/free",
     "openai": "gpt-4o-mini",
     "anthropic": "claude-3-5-sonnet-latest",
     "custom": "local/model",
@@ -40,9 +40,9 @@ BASE_URL_ENV = {
 }
 PROVIDER_HINTS = {
     "openrouter": (
-        "OpenRouter routes through an OpenAI-compatible API. Model names usually look "
-        "like provider/model, for example openai/gpt-4o-mini. AgentForge sets the "
-        "OpenRouter base URL automatically."
+        "OpenRouter routes through an OpenAI-compatible API. openrouter/free is a "
+        "router that selects from currently available free models. AgentForge sets "
+        "the OpenRouter base URL automatically."
     ),
     "openai": (
         "OpenAI uses the native OpenAI SDK path. The SDK default base URL is used."

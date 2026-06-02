@@ -11,7 +11,7 @@ def get_tokenizer(model : str) :
         except Exception:
             return None
 
-def count_tokens(text : str , model : str = 'minimax/minimax-m2.5:free') -> int:
+def count_tokens(text : str , model : str = 'openrouter/free') -> int:
     tokenizer = get_tokenizer(model)
 
     if tokenizer:

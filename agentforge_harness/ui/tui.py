@@ -1002,7 +1002,7 @@ class TUI:
 - `/clear` - Clear conversation history
 - `/config` - Show current configuration
 - `/doctor` - Check local config and runtime readiness
-- `/model <name>` - Change the model
+- `/model [name]` - Show or change the model
 - `/approval <mode>` - Change approval mode
 - `/export` - Export session as markdown (saves to ./session-{id}.md)
 - `/stats` - Show session statistics
