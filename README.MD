@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/agentforge-banner.png" alt="AgentForge pixel-art banner" width="100%">
+  <img src="docs/assets/banner.png" alt="AgentForge pixel-art banner" width="100%">
 </p>
 
 # AgentForge
@@ -12,6 +12,28 @@
 </p>
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
+
+## Quick Start
+
+Install AgentForge from PyPI, create your provider config, verify the setup, then start the terminal UI:
+
+```bash
+pip install agentforge-harness
+agentforge init
+agentforge doctor
+agentforge
+```
+
+For an isolated install:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install agentforge-harness
+agentforge init
+agentforge doctor
+agentforge
+```
 
 The project currently supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible model providers, plus streaming model responses, typed tool calls, approval gates, output hygiene, secret redaction, prompt-injection boundaries for tool observations, hooks, MCP tools, subagents, context compaction, loop detection, persistent memory, session snapshots, checkpoints, event logs, JSON reports, HTML/markdown session export, resume/restore commands, plan/build modes, skills, and a Rich terminal UI. The v1 focus is packaging, docs, tool reliability, release hygiene, and a clear safety baseline. Larger learning milestones such as Skills v2, deterministic replay, local evals, browser QA, and swarm orchestration are planned after v1.
 
@@ -36,7 +58,7 @@ The main concepts explored here are:
 
 ## Installation
 
-When published, install the package from PyPI:
+Install the package from PyPI:
 
 ```bash
 pip install agentforge-harness
