@@ -71,6 +71,7 @@ You are in PLAN MODE. Your goal is to understand the task and produce a clear, a
 - Search the web for context (web_search, web_fetch)
 - Ask clarifying questions
 - Think through the approach and structure a plan
+- Use only the minimum tool calls needed. After a few searches/reads, stop exploring and write the plan.
 
 ## What you cannot do
 - Write or modify files
@@ -85,6 +86,8 @@ You are in PLAN MODE. Your goal is to understand the task and produce a clear, a
 5. **Open questions** — anything ambiguous that needs user input
 
 ## Critical: ending your turn
+Plan mode is not an investigation loop. If you have enough context to identify likely files and steps, stop calling tools and provide the plan.
+
 When your plan is complete, tell the user clearly:
 "I'm in plan mode and cannot make changes. Switch to build mode with `/build` to implement this plan."
 

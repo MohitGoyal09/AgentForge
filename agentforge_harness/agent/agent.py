@@ -5,6 +5,7 @@ import logging
 import random
 from typing import AsyncGenerator, Callable
 from agentforge_harness.agent.events import AgentEvent, AgentEventType
+from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.agent.session import Session
 from agentforge_harness.client.response import StreamEventType, TokenUsage, ToolCall, ToolResultMessage
 from agentforge_harness.config.config import Config
@@ -39,7 +40,12 @@ class Agent:
 
     async def _agentic_loop(self) -> AsyncGenerator[AgentEvent, None]:
         max_turns = self.config.max_turns
+        if self.session.mode == AgentMode.PLAN:
+            max_turns = min(max_turns, 8)
         max_llm_retries = 3
+        plan_tool_budget = 8
+        plan_tool_calls = 0
+        force_plan_response = False
 
         model_chain = [
             self.config.model_name,
@@ -66,7 +72,11 @@ class Agent:
                             self.session.context_manager.set_latest_usage(usage)
                             self.session.context_manager.add_usage(usage)
 
-                tool_schemas = self.session.tool_registry.get_schemas(mode=self.session.mode)
+                tool_schemas = (
+                    []
+                    if force_plan_response
+                    else self.session.tool_registry.get_schemas(mode=self.session.mode)
+                )
 
                 # LLM call with circuit breaker + fallback chain
                 response_text = ""
@@ -191,30 +201,56 @@ class Agent:
                         tool_call.name,
                         display_arguments,
                     )
+
+                    skip_tool_reason: str | None = None
                     self.session.loop_detector.record_action(
                         "tool_call",
                         tool_name=tool_call.name,
                         args=tool_call.arguments,
                     )
 
-                    try:
-                        result = await self.session.tool_registry.invoke(
-                            tool_call.name,
-                            tool_call.arguments,
-                            self.config.cwd,
-                            self.session.hook_system,
-                            self.session.approval_manager,
+                    if self.session.mode == AgentMode.PLAN:
+                        plan_tool_calls += 1
+                        if plan_tool_calls > plan_tool_budget:
+                            skip_tool_reason = (
+                                f"Plan mode read-only exploration limit reached "
+                                f"({plan_tool_budget} tool call(s))."
+                            )
+                        elif loop_detection_error := self.session.loop_detector.check_for_loop():
+                            skip_tool_reason = (
+                                f"Plan mode stopped repeated tool exploration: "
+                                f"{loop_detection_error}."
+                            )
+
+                    if skip_tool_reason:
+                        result = ToolResult.error_result(
+                            f"{skip_tool_reason} Stop calling tools and provide the plan now."
                         )
-                    except Exception as e:
-                        logger.warning(
-                            "Tool '%s' crashed: %s",
-                            tool_call.name,
-                            e,
-                        )
+                        force_plan_response = True
+                    else:
+                        try:
+                            result = await self.session.tool_registry.invoke(
+                                tool_call.name,
+                                tool_call.arguments,
+                                self.config.cwd,
+                                self.session.hook_system,
+                                self.session.approval_manager,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Tool '%s' crashed: %s",
+                                tool_call.name,
+                                e,
+                            )
+                            yield AgentEvent.text_delta(
+                                f"\n[Tool '{tool_call.name}' crashed: {e}]"
+                            )
+                            result = ToolResult.error_result(f"Tool crashed: {e}")
+
+                    if skip_tool_reason:
                         yield AgentEvent.text_delta(
-                            f"\n[Tool '{tool_call.name}' crashed: {e}]"
+                            f"\n[{skip_tool_reason} Preparing a plan now.]"
                         )
-                        result = ToolResult.error_result(f"Tool crashed: {e}")
 
                     yield AgentEvent.tool_call_complete(
                         tool_call.call_id,
@@ -235,6 +271,16 @@ class Agent:
                         tool_result.tool_call_id,
                         tool_result.content,
                     )
+
+                if force_plan_response and self.session.mode == AgentMode.PLAN:
+                    self.session.context_manager.add_user_message(
+                        "SYSTEM NOTICE: Plan mode has enough context or is repeating tool exploration. "
+                        "Do not call more tools. Produce the final plan now, with goal, approach, steps, "
+                        "files to change, open questions, and the reminder to switch to /build for implementation."
+                    )
+                    self.session.loop_detector.clear()
+                    self.session.context_manager.prune_tool_outputs()
+                    continue
 
                 if usage:
                     self.session.context_manager.set_latest_usage(usage)
