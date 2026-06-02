@@ -33,6 +33,8 @@
 - Setup now writes config and env files with private permissions and nudges users toward `agentforge doctor`.
 - OpenRouter setup now defaults to `openrouter/free` so free-model routing stays available when individual free endpoints move or disappear.
 - `/model` now shows usage when run without arguments and updates the live session model, context token accounting, and circuit-breaker state when changed.
+- `/models` lists model options for the current provider, using live OpenAI-compatible model endpoints when available and curated suggestions otherwise.
+- Interactive commands now include `/provider`, `/fallbacks`, `/doctor fix`, `/paths`, `/compact`, `/errors`, `/model list`, and paginated `/models`, `/sessions`, and `/checkpoints` output.
 - HTML session export now includes summary cards, usage table, dark-mode styles, and collapsible transcript entries.
 - Tool errors now get a default recovery contract when a specific tool does not provide one.
 - Doctor now reports config permissions, `.env` permissions, tracked `.env` files, missing `.env` ignore rules, and out-of-workspace executable paths more explicitly.

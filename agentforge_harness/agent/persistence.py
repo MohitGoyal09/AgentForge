@@ -156,6 +156,7 @@ class PersistenceManager:
             sessions.append(
                 {
                     "session_id": data["session_id"],
+                    "name": data.get("name", ""),
                     "created_at": data["created_at"],
                     "updated_at": data["updated_at"],
                     "turn_count": data["turn_count"],
@@ -238,3 +239,20 @@ class PersistenceManager:
 
         if not file_exists:
             os.chmod(file_path, 0o600)
+
+    def list_events(self, session_id: str, limit: int | None = None) -> list[dict[str, Any]]:
+        file_path = self._event_path(session_id)
+        if not file_path.exists():
+            return []
+
+        events: list[dict[str, Any]] = []
+        with open(file_path, "r", encoding="utf-8") as fp:
+            for line in fp:
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+
+        if limit is not None and limit >= 0:
+            return events[-limit:]
+        return events

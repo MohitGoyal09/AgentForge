@@ -388,6 +388,85 @@ class TUI:
             )
         )
 
+    def show_key_values(
+        self,
+        title: str,
+        rows: list[tuple[str, str]],
+        *,
+        border_style: str = "border",
+        footer: str = "",
+    ) -> None:
+        table = Table.grid(padding=(0, 2))
+        table.add_column(style="muted", no_wrap=True)
+        table.add_column(style="code", overflow="fold")
+
+        for key, value in rows:
+            table.add_row(key, value)
+
+        blocks: list[Any] = [table if rows else Text("No values", style="muted")]
+        if footer:
+            blocks.append(Text(footer, style="muted"))
+
+        self.console.print(
+            Panel(
+                Group(*blocks),
+                title=Text(title, style="highlight"),
+                title_align="left",
+                border_style=border_style,
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
+    def show_models(
+        self,
+        provider: str,
+        current_model: str,
+        models: list[Any],
+        live: bool,
+        message: str = "",
+        page: int = 1,
+        total_pages: int = 1,
+        total_count: int | None = None,
+    ) -> None:
+        table = Table(
+            box=box.SIMPLE,
+            show_header=True,
+            header_style="highlight",
+            expand=True,
+        )
+        table.add_column("Model", style="code", overflow="fold")
+        table.add_column("Source", style="muted", no_wrap=True)
+        table.add_column("Note", style="muted", overflow="fold")
+
+        for model in models:
+            name = str(getattr(model, "name", ""))
+            label = f"{name}  (current)" if name == current_model else name
+            table.add_row(
+                label,
+                str(getattr(model, "source", "")),
+                str(getattr(model, "note", "")),
+            )
+
+        status = "live" if live else "suggestions"
+        count_text = f", {total_count} total" if total_count is not None else ""
+        subtitle = f"{provider} models - {status} - page {page}/{total_pages}{count_text}"
+        if message:
+            subtitle = f"{subtitle}\n{message}\nUse /model <model-id> to switch. Use /models --page N for more."
+        else:
+            subtitle = f"{subtitle}\nUse /model <model-id> to switch. Use /models --page N for more."
+
+        self.console.print(
+            Panel(
+                Group(Text(subtitle, style="muted"), table if models else Text("No models found", style="muted")),
+                title=Text("Models", style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
+
     def show_tools(self, tools: list[Any]) -> None:
         table = Table(
             box=box.SIMPLE,
@@ -529,7 +608,14 @@ class TUI:
             )
         )
 
-    def show_sessions(self, sessions: list[dict[str, Any]]) -> None:
+    def show_sessions(
+        self,
+        sessions: list[dict[str, Any]],
+        *,
+        page: int = 1,
+        total_pages: int = 1,
+        total_count: int | None = None,
+    ) -> None:
         table = Table(
             box=box.SIMPLE,
             show_header=True,
@@ -556,7 +642,11 @@ class TUI:
         self.console.print(
             Panel(
                 table if sessions else Text("No saved sessions", style="muted"),
-                title=Text("Saved Sessions", style="highlight"),
+                title=Text(
+                    f"Saved Sessions {page}/{total_pages}"
+                    + (f" ({total_count})" if total_count is not None else ""),
+                    style="highlight",
+                ),
                 title_align="left",
                 border_style="border",
                 box=box.ROUNDED,
@@ -564,7 +654,14 @@ class TUI:
             )
         )
 
-    def show_checkpoints(self, checkpoints: list[dict[str, Any]]) -> None:
+    def show_checkpoints(
+        self,
+        checkpoints: list[dict[str, Any]],
+        *,
+        page: int = 1,
+        total_pages: int = 1,
+        total_count: int | None = None,
+    ) -> None:
         table = Table(
             box=box.SIMPLE,
             show_header=True,
@@ -589,7 +686,11 @@ class TUI:
         self.console.print(
             Panel(
                 table if checkpoints else Text("No checkpoints", style="muted"),
-                title=Text("Checkpoints", style="highlight"),
+                title=Text(
+                    f"Checkpoints {page}/{total_pages}"
+                    + (f" ({total_count})" if total_count is not None else ""),
+                    style="highlight",
+                ),
                 title_align="left",
                 border_style="border",
                 box=box.ROUNDED,
@@ -1002,7 +1103,15 @@ class TUI:
 - `/clear` - Clear conversation history
 - `/config` - Show current configuration
 - `/doctor` - Check local config and runtime readiness
+- `/doctor fix` - Apply safe doctor fixes
+- `/provider [name]` - Show or switch provider
+- `/models` - List model suggestions for the current provider
+- `/model list` - Alias for `/models`
 - `/model [name]` - Show or change the model
+- `/fallbacks` - Show or edit fallback model chain
+- `/paths` - Show config, data, session, checkpoint, and skill paths
+- `/compact` - Compact older context now
+- `/errors` - Show recent model/tool errors
 - `/approval <mode>` - Change approval mode
 - `/export` - Export session as markdown (saves to ./session-{id}.md)
 - `/stats` - Show session statistics

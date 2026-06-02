@@ -55,7 +55,11 @@ def main() -> int:
         print("No dist artifacts found after build", file=sys.stderr)
         return 1
 
-    return _run([sys.executable, "-m", "twine", "check", *dist_files], default_env)
+    twine_result = _run([sys.executable, "-m", "twine", "check", *dist_files], default_env)
+    if twine_result != 0:
+        return twine_result
+
+    return _smoke_console_script(dist_files, default_env)
 
 
 def _run(command: list[str], env: dict[str, str], capture: bool = False) -> int:
@@ -78,6 +82,40 @@ def _run(command: list[str], env: dict[str, str], capture: bool = False) -> int:
     if completed.returncode != 0:
         print(f"Command failed with exit code {completed.returncode}", file=sys.stderr)
     return completed.returncode
+
+
+def _smoke_console_script(dist_files: list[str], env: dict[str, str]) -> int:
+    wheel = next((Path(path) for path in dist_files if path.endswith(".whl")), None)
+    if not wheel:
+        print("No wheel artifact found for console-script smoke", file=sys.stderr)
+        return 1
+
+    with tempfile.TemporaryDirectory(prefix="agentforge-wheel-smoke-") as tmpdir:
+        venv_dir = Path(tmpdir) / "venv"
+        result = _run([sys.executable, "-m", "venv", str(venv_dir)], env)
+        if result != 0:
+            return result
+
+        python_bin = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        result = _run(
+            [str(python_bin), "-m", "pip", "install", "--no-deps", "--force-reinstall", str(wheel)],
+            env,
+        )
+        if result != 0:
+            return result
+
+        script_path = venv_dir / ("Scripts/agentforge.exe" if os.name == "nt" else "bin/agentforge")
+        if os.name == "nt":
+            return _run([str(script_path), "--version"], env)
+
+        script = script_path.read_text(encoding="utf-8")
+        expected = "from agentforge_harness.cli.run import cli"
+        if expected not in script:
+            print("agentforge console script has the wrong entry point", file=sys.stderr)
+            print(script, file=sys.stderr)
+            return 1
+
+    return 0
 
 
 if __name__ == "__main__":

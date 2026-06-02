@@ -10,11 +10,22 @@ from agentforge_harness.cli.report import (
     report_to_json,
     write_session_export,
 )
-from agentforge_harness.config.config import ApprovalPolicy, Config
+from agentforge_harness.cli.models import list_models_for_config
+from agentforge_harness.cli.setup import API_KEY_ENV, DEFAULT_BASE_URLS, DEFAULT_MODELS
+from agentforge_harness.config.config import ApprovalPolicy, Config, ModelProvider
+from agentforge_harness.config.loader import (
+    get_config_dir,
+    get_data_dir,
+    get_global_skills_dir,
+    get_system_config_path,
+    get_user_skills_dir,
+)
 from agentforge_harness.tools.base import ToolInvocation
 from agentforge_harness.tools.builtin.todo import TodosTool
 from agentforge_harness.ui.tui import TUI, get_console
 from pathlib import Path
+import math
+import os
 
 console = get_console()
 
@@ -38,7 +49,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /doctor /model /new /reload /version /plan /build /name /skills /tools /mcp /stats /report /todos /exit",
+                "commands: /help /doctor /provider /models /model /fallbacks /paths /compact /errors /new /reload /version /plan /build /name /skills /tools /mcp /stats /report /todos /exit",
             ],
             mode=AgentMode.BUILD.value,
         )
@@ -107,12 +118,26 @@ class CLI:
         if name == "/doctor":
             from agentforge_harness.cli.doctor import build_doctor_report, print_doctor_report
 
+            if argument == "fix":
+                report = build_doctor_report(self.config)
+                self.tui.show_notice("\n".join(self._doctor_safe_fixes(report)), "Doctor fix")
+                print_doctor_report(
+                    build_doctor_report(self.config),
+                    console=console,
+                )
+                return True
             print_doctor_report(
                 build_doctor_report(self.config),
                 console=console,
             )
             return True
+        if name == "/provider":
+            await self._handle_provider_command(argument)
+            return True
         if name == "/model":
+            if argument == "list":
+                await self._show_models("")
+                return True
             if not argument:
                 self.tui.show_notice(
                     "\n".join(
@@ -139,6 +164,21 @@ class CLI:
                     ),
                     "Model",
                 )
+            return True
+        if name == "/models":
+            await self._show_models(argument)
+            return True
+        if name == "/fallbacks":
+            self._handle_fallbacks_command(argument)
+            return True
+        if name == "/paths":
+            self._show_paths()
+            return True
+        if name == "/compact":
+            await self._handle_compact_command()
+            return True
+        if name == "/errors":
+            self._show_recent_errors(argument)
             return True
         if name == "/approval":
             if not argument:
@@ -227,7 +267,18 @@ class CLI:
             return True
         if name == "/sessions":
             if self.agent:
-                self.tui.show_sessions(self.agent.session.persistence.list_sessions())
+                page, limit = self._parse_page_args(argument)
+                items, total_pages, total_count = self._paginate(
+                    self.agent.session.persistence.list_sessions(),
+                    page=page,
+                    limit=limit,
+                )
+                self.tui.show_sessions(
+                    items,
+                    page=page,
+                    total_pages=total_pages,
+                    total_count=total_count,
+                )
             return True
         if name == "/resume":
             if not self.agent:
@@ -253,7 +304,18 @@ class CLI:
             return True
         if name == "/checkpoints":
             if self.agent:
-                self.tui.show_checkpoints(self.agent.session.persistence.list_checkpoints())
+                page, limit = self._parse_page_args(argument)
+                items, total_pages, total_count = self._paginate(
+                    self.agent.session.persistence.list_checkpoints(),
+                    page=page,
+                    limit=limit,
+                )
+                self.tui.show_checkpoints(
+                    items,
+                    page=page,
+                    total_pages=total_pages,
+                    total_count=total_count,
+                )
             return True
         if name == "/restore":
             if not self.agent:
@@ -415,8 +477,9 @@ class CLI:
             return True
 
         known = [
-            "/help", "/exit", "/quit", "/clear", "/config", "/model",
-            "/doctor", "/approval", "/stats", "/todos", "/tools", "/skills", "/skill",
+            "/help", "/exit", "/quit", "/clear", "/config", "/provider", "/model", "/models",
+            "/fallbacks", "/doctor", "/paths", "/compact", "/errors",
+            "/approval", "/stats", "/todos", "/tools", "/skills", "/skill",
             "/unskill", "/mcp", "/name", "/save", "/sessions", "/resume",
             "/checkpoint", "/checkpoints", "/restore", "/plan", "/build",
             "/new", "/reload", "/version", "/retry", "/history", "/report",
@@ -429,6 +492,274 @@ class CLI:
         msg += "\nRun /help to see available commands."
         self.tui.show_error(msg)
         return True
+
+    async def _show_models(self, argument: str) -> None:
+        page, limit = self._parse_page_args(argument)
+        result = await list_models_for_config(self.config, limit=max(limit * page, limit))
+        items, total_pages, total_count = self._paginate(result.models, page=page, limit=limit)
+        self.tui.show_models(
+            provider=result.provider,
+            current_model=result.current_model,
+            models=items,
+            live=result.live,
+            message=result.message,
+            page=page,
+            total_pages=total_pages,
+            total_count=total_count,
+        )
+
+    def _parse_page_args(self, argument: str, *, default_limit: int = 10) -> tuple[int, int]:
+        page = 1
+        limit = default_limit
+        parts = argument.split()
+        index = 0
+        while index < len(parts):
+            part = parts[index]
+            if part in {"--page", "-p"} and index + 1 < len(parts):
+                page = self._positive_int(parts[index + 1], default=page)
+                index += 2
+                continue
+            if part in {"--limit", "-n"} and index + 1 < len(parts):
+                limit = min(self._positive_int(parts[index + 1], default=limit), 100)
+                index += 2
+                continue
+            if part.isdigit():
+                page = self._positive_int(part, default=page)
+            index += 1
+        return page, limit
+
+    def _positive_int(self, value: str, *, default: int) -> int:
+        try:
+            parsed = int(value)
+        except ValueError:
+            return default
+        return max(parsed, 1)
+
+    def _paginate(self, items: list[Any], *, page: int, limit: int) -> tuple[list[Any], int, int]:
+        total_count = len(items)
+        total_pages = max(1, math.ceil(total_count / limit)) if limit else 1
+        page = min(max(page, 1), total_pages)
+        start = (page - 1) * limit
+        end = start + limit
+        return items[start:end], total_pages, total_count
+
+    async def _handle_provider_command(self, argument: str) -> None:
+        if not argument:
+            rows = [
+                ("provider", self.config.provider.value),
+                ("model", self.config.model_name),
+                ("base url", self.config.base_url or "provider default"),
+                ("api key env", API_KEY_ENV[self.config.provider.value]),
+                ("api key", "configured" if self.config.api_key else "missing"),
+            ]
+            self.tui.show_key_values(
+                "Provider",
+                rows,
+                footer="Usage: /provider <openrouter|openai|anthropic|custom> [base-url] [model]",
+            )
+            return
+
+        tokens = argument.split()
+        provider_name = tokens[0].lower()
+        try:
+            provider = ModelProvider(provider_name)
+        except ValueError:
+            choices = ", ".join(item.value for item in ModelProvider)
+            self.tui.show_error(f"Unknown provider: {provider_name}\nChoices: {choices}")
+            return
+
+        remaining = tokens[1:]
+        base_url: str | None = None
+        default_model = DEFAULT_MODELS[provider.value]
+        model_name = default_model
+
+        if provider == ModelProvider.CUSTOM:
+            if not remaining:
+                self.tui.show_error(
+                    "Usage: /provider custom <base-url> [model]\nExample: /provider custom http://localhost:11434/v1 local/model"
+                )
+                return
+            base_url = remaining[0]
+            if len(remaining) > 1:
+                model_name = remaining[1]
+        else:
+            base_url = DEFAULT_BASE_URLS[provider.value] or None
+            if remaining:
+                model_name = remaining[0]
+
+        old_provider = self.config.provider.value
+        old_model = self.config.model_name
+        if self.agent and self.agent.session:
+            self.agent.session.set_provider(
+                provider,
+                model_name=model_name,
+                base_url=base_url,
+            )
+        else:
+            self.config.model.provider = provider
+            self.config.model.name = model_name
+            self.config.model.base_url = base_url
+
+        self.tui.show_key_values(
+            "Provider",
+            [
+                ("provider", f"{old_provider} -> {self.config.provider.value}"),
+                ("model", f"{old_model} -> {self.config.model_name}"),
+                ("base url", self.config.base_url or "provider default"),
+                ("api key env", API_KEY_ENV[self.config.provider.value]),
+                ("api key", "configured" if self.config.api_key else "missing"),
+            ],
+            footer="Runtime-only change. Run agentforge init to persist provider settings.",
+        )
+
+    def _handle_fallbacks_command(self, argument: str) -> None:
+        parts = argument.split()
+        action = parts[0].lower() if parts else ""
+        values = parts[1:]
+
+        if not action:
+            chain = [self.config.model_name, *self.config.model.fallbacks]
+            rows = [(str(index), model) for index, model in enumerate(chain, start=1)]
+            self.tui.show_key_values(
+                "Fallbacks",
+                rows,
+                footer="Usage: /fallbacks add <model>, /fallbacks remove <model>, /fallbacks clear, /fallbacks set <model>...",
+            )
+            return
+
+        if action == "add":
+            if not values:
+                self.tui.show_error("Usage: /fallbacks add <model>")
+                return
+            added: list[str] = []
+            for model in values:
+                if model == self.config.model_name or model in self.config.model.fallbacks:
+                    continue
+                self.config.model.fallbacks.append(model)
+                added.append(model)
+            self.tui.show_notice(
+                f"Added fallback(s): {', '.join(added) if added else 'none'}",
+                "Fallbacks",
+            )
+            return
+
+        if action == "remove":
+            if not values:
+                self.tui.show_error("Usage: /fallbacks remove <model>")
+                return
+            before = list(self.config.model.fallbacks)
+            self.config.model.fallbacks = [model for model in before if model not in values]
+            removed = [model for model in before if model not in self.config.model.fallbacks]
+            self.tui.show_notice(
+                f"Removed fallback(s): {', '.join(removed) if removed else 'none'}",
+                "Fallbacks",
+            )
+            return
+
+        if action == "clear":
+            count = len(self.config.model.fallbacks)
+            self.config.model.fallbacks.clear()
+            self.tui.show_notice(f"Cleared {count} fallback model(s)", "Fallbacks")
+            return
+
+        if action == "set":
+            self.config.model.fallbacks = [model for model in values if model != self.config.model_name]
+            self.tui.show_notice(
+                f"Fallback chain set to: {', '.join(self.config.model.fallbacks) or 'none'}",
+                "Fallbacks",
+            )
+            return
+
+        self.tui.show_error("Usage: /fallbacks [add|remove|clear|set]")
+
+    def _show_paths(self) -> None:
+        data_dir = get_data_dir()
+        rows = [
+            ("cwd", str(self.config.cwd)),
+            ("config dir", str(get_config_dir())),
+            ("system config", str(get_system_config_path())),
+            ("workspace config", str(self.config.cwd / ".agentforge" / "config.toml")),
+            ("env", str(get_config_dir() / ".env")),
+            ("workspace env", str(self.config.cwd / ".env")),
+            ("data dir", str(data_dir)),
+            ("sessions", str(data_dir / "sessions")),
+            ("checkpoints", str(data_dir / "checkpoints")),
+            ("events", str(data_dir / "events")),
+            ("user skills", str(get_user_skills_dir())),
+            ("global skills", str(get_global_skills_dir())),
+        ]
+        rows.extend((f"skill root {index}", str(root)) for index, root in enumerate(self.config.skill_roots, start=1))
+        self.tui.show_key_values("Paths", rows)
+
+    async def _handle_compact_command(self) -> None:
+        if not self.agent or not self.agent.session.context_manager:
+            self.tui.show_error("No active session")
+            return
+        self.tui.show_notice("Compacting older conversation messages...", "Compact")
+        try:
+            summary, usage = await self.agent.session.context_manager.compress_old_messages(
+                self.agent.session.chat_compactor
+            )
+        except Exception as exc:
+            self.tui.show_error(f"Compaction failed: {exc}", "Compact")
+            return
+        if not summary:
+            self.tui.show_notice("Nothing to compact yet. Keep chatting first.", "Compact")
+            return
+        if usage:
+            self.agent.session.context_manager.set_latest_usage(usage)
+            self.agent.session.context_manager.add_usage(usage)
+        self.tui.show_notice("Context compacted. Recent turns were preserved.", "Compact")
+
+    def _show_recent_errors(self, argument: str) -> None:
+        if not self.agent or not self.agent.session:
+            self.tui.show_error("No active session")
+            return
+        limit = self._positive_int(argument, default=10) if argument else 10
+        events = self.agent.session.persistence.list_events(self.agent.session.session_id, limit=200)
+        rows: list[tuple[str, str]] = []
+        for event in reversed(events):
+            event_type = str(event.get("type", ""))
+            payload = event.get("payload") or {}
+            timestamp = str(event.get("timestamp", ""))
+            message = ""
+            if event_type == "agent_error":
+                message = str(payload.get("error", ""))
+            elif event_type == "tool_call_complete" and not payload.get("success", True):
+                message = f"{payload.get('name', 'tool')}: {payload.get('error') or payload.get('output') or 'failed'}"
+            elif event_type == "text_delta":
+                content = str(payload.get("content", ""))
+                lowered = content.lower()
+                if any(term in lowered for term in (" error:", "failed", "rate limit", "circuit open", "trying fallback")):
+                    message = content.strip()
+            if message:
+                rows.append((timestamp, " ".join(message.split())))
+            if len(rows) >= limit:
+                break
+        self.tui.show_key_values(
+            "Recent Errors",
+            rows,
+            border_style="error" if rows else "border",
+            footer="Showing newest first. Usage: /errors [count]",
+        )
+
+    def _doctor_safe_fixes(self, report: Any) -> list[str]:
+        messages: list[str] = []
+        for check in report.checks:
+            if check.name == "safety.env.gitignore" and check.status == "warn":
+                gitignore = self.config.cwd / ".gitignore"
+                existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+                lines = existing.splitlines()
+                if ".env" not in lines:
+                    suffix = "" if not existing or existing.endswith("\n") else "\n"
+                    gitignore.write_text(f"{existing}{suffix}.env\n", encoding="utf-8")
+                    messages.append(f"Added .env to {gitignore}")
+            elif check.name == "config.system" and check.status == "warn":
+                path = get_system_config_path()
+                if path.exists():
+                    os.chmod(path, 0o600)
+                    messages.append(f"Set private permissions on {path}")
+        return messages or ["No safe automatic fixes were available."]
 
     def _redact_config(self, value: Any) -> Any:
         secret_markers = ("key", "token", "secret", "password")

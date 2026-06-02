@@ -782,7 +782,15 @@ Interactive commands:
 | `/clear` | implemented | Clear conversation history |
 | `/config` | implemented | Show configuration (Rich Table) |
 | `/doctor` | implemented | Check config, provider keys, skill roots, MCP commands, and safety flags |
+| `/doctor fix` | implemented | Apply safe doctor fixes |
+| `/provider [name]` | implemented | Show or switch provider for current session |
+| `/models [--page N] [--limit N]` | implemented | List model suggestions for the current provider |
+| `/model list` | implemented | Alias for `/models` |
 | `/model [name]` | implemented | Show or change model for current session |
+| `/fallbacks` | implemented | Show or edit fallback model chain |
+| `/paths` | implemented | Show config, env, data, sessions, checkpoints, skills, and cwd paths |
+| `/compact` | implemented | Force context compaction |
+| `/errors [n]` | implemented | Show recent model/tool errors |
 | `/approval <mode>` | implemented | Change approval policy |
 | `/stats` | implemented | Show token/session stats |
 | `/todos` | implemented | Show active todos |
@@ -796,8 +804,8 @@ Interactive commands:
 | `/save` | implemented | Save current session snapshot |
 | `/checkpoint` | implemented | Create checkpoint from current session |
 | `/restore <checkpoint_id>` | implemented | Restore checkpoint state |
-| `/checkpoints` | implemented | List saved checkpoints |
-| `/sessions` | implemented | List saved sessions |
+| `/checkpoints [--page N] [--limit N]` | implemented | List saved checkpoints |
+| `/sessions [--page N] [--limit N]` | implemented | List saved sessions |
 | `/resume <session_id>` | implemented | Resume saved session |
 | `/plan` | implemented | Switch to plan mode (read-only tools) |
 | `/build` | implemented | Switch to build mode (all tools) |

@@ -4,7 +4,7 @@ import uuid
 from typing import Any
 from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.client.llm_client import LLMClient
-from agentforge_harness.config.config import Config
+from agentforge_harness.config.config import Config, ModelProvider
 from agentforge_harness.config.loader import get_data_dir
 from agentforge_harness.context.compaction import ChatCompactor
 from agentforge_harness.context.loop_detector import LoopDetector
@@ -94,6 +94,30 @@ class Session:
         self.config.model_name = model_name
         self.circuit_breaker.reset(model_name)
         if self.context_manager:
+            self.context_manager.set_model_name(model_name)
+            self.context_manager.refresh_system_prompt(
+                tools=self.tool_registry.get_tools(mode=self.mode),
+                mode=self.mode,
+                skills=self.skills_manager.list_skills(),
+                active_skills=self.active_skills,
+                active_skill_bodies=self.skills_manager.get_active_skill_bodies(self.active_skills),
+            )
+
+    def set_provider(
+        self,
+        provider: ModelProvider,
+        *,
+        model_name: str,
+        base_url: str | None = None,
+    ) -> None:
+        self.config.model.provider = provider
+        self.config.model.name = model_name
+        self.config.model.base_url = base_url
+        self.client = LLMClient(config=self.config)
+        self.chat_compactor.client = self.client
+        self.circuit_breaker.reset()
+        if self.context_manager:
+            self.context_manager.config = self.config
             self.context_manager.set_model_name(model_name)
             self.context_manager.refresh_system_prompt(
                 tools=self.tool_registry.get_tools(mode=self.mode),

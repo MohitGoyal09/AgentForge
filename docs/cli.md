@@ -74,7 +74,15 @@ agentforge completion fish
 | `/history [n]` | Show recent messages |
 | `/config` | Show redacted config |
 | `/doctor` | Show doctor report |
+| `/doctor fix` | Apply safe doctor fixes, such as `.gitignore` entries and private config permissions |
+| `/provider [name]` | Show or switch provider for this session |
+| `/models [--page N] [--limit N]` | List model suggestions for the current provider |
+| `/model list` | Alias for `/models` |
 | `/model [name]` | Show or change the model for this session |
+| `/fallbacks` | Show or edit fallback models |
+| `/paths` | Show config, env, session, checkpoint, skill, and cwd paths |
+| `/compact` | Force context compaction |
+| `/errors [n]` | Show recent model/tool errors |
 | `/approval <mode>` | Change approval policy |
 | `/tools` | List registered tools |
 | `/skills` | List available skills |
@@ -83,10 +91,10 @@ agentforge completion fish
 | `/mcp` | Show MCP server status |
 | `/name [name]` | Show or set session name |
 | `/save` | Save session snapshot |
-| `/sessions` | List saved sessions |
+| `/sessions [--page N] [--limit N]` | List saved sessions |
 | `/resume <session_id>` | Resume a saved session |
 | `/checkpoint` | Save a checkpoint |
-| `/checkpoints` | List checkpoints |
+| `/checkpoints [--page N] [--limit N]` | List checkpoints |
 | `/restore <checkpoint_id>` | Restore a checkpoint |
 | `/plan` | Switch to read-only plan mode |
 | `/build` | Switch to normal build mode |
