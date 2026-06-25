@@ -74,6 +74,12 @@ class Agent:
         ]
         circuit_breaker = self.session.circuit_breaker
 
+        # Repair any assistant tool_calls left without results by a prior
+        # interrupted/resumed turn, so the first provider request is well-formed.
+        repaired = self.session.context_manager.repair_dangling_tool_calls()
+        if repaired:
+            logger.info("Repaired %d dangling tool call(s) from a prior run", repaired)
+
         try:
             for _turn in range(max_turns):
                 self.session.increment_turn()
