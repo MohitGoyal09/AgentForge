@@ -785,7 +785,8 @@ class CLI:
         await self._auto_activate_skills(message)
 
         async for event in self.agent.run(message):
-            self.agent.session.record_event(event.type.value, event.data)
+            # Event recording now happens inside Agent.run() so embedded usage
+            # is logged too; the CLI just renders.
 
             if event.type == AgentEventType.TEXT_DELTA:
                 content = event.data.get("content", "")

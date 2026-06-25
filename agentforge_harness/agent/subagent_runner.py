@@ -16,6 +16,8 @@ async def run_subagent(config: Config, prompt: str) -> AsyncIterator[AgentEvent]
     """
     from agentforge_harness.agent.agent import Agent
 
-    async with Agent(config) as agent:
+    # Subagents run inside a parent turn; skip per-event persistence so they do
+    # not spam their own event logs. The parent run already records its events.
+    async with Agent(config, record_events=False) as agent:
         async for event in agent.run(prompt):
             yield event
