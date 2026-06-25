@@ -91,6 +91,8 @@ class LLMClient:
                     "model": model_name,
                     "messages": messages,
                     "stream": stream,
+                    "temperature": self.config.temperature,
+                    "max_tokens": self.config.model.max_output_tokens,
         }
 
         if stream:

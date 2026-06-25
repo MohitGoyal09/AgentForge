@@ -51,6 +51,57 @@ def test_openai_compatible_client_uses_configured_base_url(monkeypatch):
     assert captured["base_url"] == "http://localhost:11434/v1"
 
 
+async def test_openai_path_sends_temperature_and_max_tokens(monkeypatch):
+    """Regression: the OpenAI-compatible path previously omitted temperature
+    and max_output_tokens, so configured sampling params were silently dropped."""
+    captured = {}
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content="hi", tool_calls=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=SimpleNamespace(
+                    prompt_tokens=1,
+                    completion_tokens=1,
+                    total_tokens=2,
+                    prompt_tokens_details=None,
+                ),
+            )
+
+    class FakeClient:
+        chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+    config = Config(
+        cwd=Path("/tmp"),
+        model=ModelConfig(
+            provider=ModelProvider.OPENAI,
+            name="gpt-4o",
+            temperature=0.3,
+            max_output_tokens=512,
+        ),
+    )
+    client = LLMClient(config)
+    monkeypatch.setattr(client, "get_client", lambda: FakeClient())
+
+    _ = [
+        event
+        async for event in client.chat_completion(
+            messages=[{"role": "user", "content": "hi"}],
+            stream=False,
+        )
+    ]
+
+    assert captured["temperature"] == 0.3
+    assert captured["max_tokens"] == 512
+
+
 def test_anthropic_message_conversion_preserves_system_and_tools():
     config = Config(
         cwd=Path("/tmp"),
