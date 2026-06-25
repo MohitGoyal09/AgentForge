@@ -81,11 +81,3 @@ class MCPManager:
             servers.append(server_info)
 
         return servers
-    
-    async def shutdown(self) -> None:
-        disconnection_tasks = [client.disconnect() for client in self._clients.values()]
-
-        await asyncio.gather(*disconnection_tasks , return_exceptions=True)
-
-        self._clients.clear()
-        self._initialized = False
