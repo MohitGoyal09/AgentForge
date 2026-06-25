@@ -64,13 +64,26 @@ class Agent:
                         yield AgentEvent.text_delta(
                             f"\n[Context: {budget['usage_pct']}% ({budget['total_tokens']}/{budget['context_window']} tokens)]"
                         )
-                    if budget["critical"] or budget["usage_pct"] >= 80:
+                    if budget["should_compact"]:
                         summary, usage = await self.session.context_manager.compress_old_messages(
                             self.session.chat_compactor
                         )
                         if summary and usage:
                             self.session.context_manager.set_latest_usage(usage)
                             self.session.context_manager.add_usage(usage)
+                        else:
+                            # Compaction produced nothing (too few messages or it
+                            # failed). Fall back to pruning old tool outputs so we
+                            # do not keep growing the context silently.
+                            pruned = self.session.context_manager.prune_tool_outputs()
+                            if pruned:
+                                yield AgentEvent.text_delta(
+                                    f"\n[Context near limit: compaction unavailable, pruned {pruned} old tool result(s)]"
+                                )
+                            elif budget["critical"]:
+                                yield AgentEvent.text_delta(
+                                    "\n[Warning: context is nearly full and could not be reduced]"
+                                )
 
                 tool_schemas = (
                     []

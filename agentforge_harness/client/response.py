@@ -80,8 +80,15 @@ class StreamEvent:
 def parse_tool_call_arguments(arguments_str : str) -> dict[str , Any]:
     if not arguments_str:
         return {}
-    
-    try :
-        return json.loads(arguments_str)
-    except json.JSONDecodeError:
-        return {'raw_arguements': arguments_str}
+
+    try:
+        parsed = json.loads(arguments_str)
+    except (json.JSONDecodeError, TypeError):
+        return {"raw_arguments": arguments_str}
+
+    # Tool arguments must be a JSON object. Wrap anything else (list, number,
+    # string, null) so callers always receive a dict to validate against.
+    if not isinstance(parsed, dict):
+        return {"raw_arguments": parsed}
+
+    return parsed

@@ -1,8 +1,11 @@
+import logging
 from typing import Any
 from agentforge_harness.client.llm_client import LLMClient
 from agentforge_harness.client.response import StreamEventType, TokenUsage
 from agentforge_harness.context.manager import ContextManager
 from agentforge_harness.prompts.system import get_compression_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class ChatCompactor:
@@ -86,8 +89,17 @@ class ChatCompactor:
                     usage = event.token_usage
 
             if not summary or not usage:
+                logger.warning(
+                    "Compaction produced no usable summary (summary=%s, usage=%s)",
+                    bool(summary),
+                    bool(usage),
+                )
                 return None, None
 
             return summary, usage
         except Exception:
+            # Do not swallow silently: a failed compaction means the agent would
+            # otherwise keep running over budget. Log it so it is visible; the
+            # caller surfaces a user-facing notice and applies a fallback.
+            logger.exception("Context compaction failed")
             return None, None

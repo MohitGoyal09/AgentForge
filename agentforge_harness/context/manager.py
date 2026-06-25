@@ -135,6 +135,11 @@ class ContextManager:
             messages.append(item.to_dict())
         return messages
     
+    # Context-budget tiers (percent of the model context window).
+    _WARNING_THRESHOLD_PCT = 70
+    _COMPACT_THRESHOLD_PCT = 80
+    _CRITICAL_THRESHOLD_PCT = 95
+
     def get_context_budget(self) -> dict:
         window = self.config.model.context_window
         total = self._estimate_current_tokens()
@@ -144,12 +149,16 @@ class ContextManager:
             "context_window": window,
             "usage_pct": round(pct, 1),
             "remaining": window - total,
-            "warning": pct >= 70,
-            "critical": total > window,
+            "warning": pct >= self._WARNING_THRESHOLD_PCT,
+            # should_compact is the actionable trigger: compact before we run
+            # out of room, not after we have already overrun the window.
+            "should_compact": pct >= self._COMPACT_THRESHOLD_PCT,
+            # critical means dangerously full — compaction is now urgent.
+            "critical": pct >= self._CRITICAL_THRESHOLD_PCT,
         }
 
     def needs_compression(self) -> bool:
-        return self.get_context_budget()["critical"]
+        return self.get_context_budget()["should_compact"]
 
     def _estimate_current_tokens(self) -> int:
         total = 0

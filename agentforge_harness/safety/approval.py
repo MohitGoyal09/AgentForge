@@ -125,28 +125,55 @@ class ApprovalManager:
 
 
 
+    def _default_mutation_decision(self, has_paths: bool) -> ApprovalDecision:
+        """Decision for a mutating op with no known-safe command basis.
+
+        Applies the configured policy instead of silently approving. Covers
+        in-workspace writes as well as path-less mutations (MCP tools, memory,
+        network, subagents) that previously fell through to APPROVED.
+        """
+        policy = self.approval_policy
+        if policy in {ApprovalPolicy.AUTO, ApprovalPolicy.ON_FAILURE}:
+            return ApprovalDecision.APPROVED
+        if policy == ApprovalPolicy.NEVER:
+            # NEVER only auto-approves known-safe read-only commands; a mutating
+            # action with no safe-command basis is rejected outright.
+            return ApprovalDecision.REJECTED
+        if policy == ApprovalPolicy.AUTO_EDIT:
+            # Trust local edits (operations that name concrete paths), but still
+            # confirm path-less mutations like MCP tools and memory writes.
+            return ApprovalDecision.APPROVED if has_paths else ApprovalDecision.NEEDS_CONFIRMATION
+        # ON_REQUEST (default) and any other policy: ask before mutating.
+        return ApprovalDecision.NEEDS_CONFIRMATION
+
     async def check_approval(self, context : ApprovalContext) -> ApprovalDecision:
+        # Read-only operations never require approval.
         if not context.is_mutating:
             return ApprovalDecision.APPROVED
-        if context.command:
-            decision = self._assess_command_safety(context.command)
 
-            if decision != ApprovalDecision.NEEDS_CONFIRMATION:
-                return decision
-        
-        for path in context.affected_paths:
-            path_decision = ApprovalDecision.NEEDS_CONFIRMATION
-            if path.is_relative_to(self.cwd):
-                path_decision = ApprovalDecision.APPROVED
-            else : 
-                return path_decision
-        
-        if context.is_dangerous:
-            if self.approval_policy == ApprovalPolicy.YOLO:
-                return ApprovalDecision.APPROVED
+        # YOLO approves everything.
+        if self.approval_policy == ApprovalPolicy.YOLO:
+            return ApprovalDecision.APPROVED
+
+        # Command-based tools (shell): the command-safety assessment is
+        # authoritative. It rejects dangerous commands, approves known-safe
+        # ones, and asks for confirmation otherwise — we honour that verdict
+        # directly rather than letting NEEDS_CONFIRMATION fall through.
+        if context.command:
+            return self._assess_command_safety(context.command)
+
+        # A write that escapes the workspace, or any tool-flagged dangerous
+        # action, always needs confirmation.
+        escapes_workspace = any(
+            not path.is_relative_to(self.cwd) for path in context.affected_paths
+        )
+        if escapes_workspace or context.is_dangerous:
             return ApprovalDecision.NEEDS_CONFIRMATION
 
-        return ApprovalDecision.APPROVED
+        # In-workspace writes, or a mutating tool that exposed neither a command
+        # nor any affected path (MCP tools, memory, network, subagents). Decide
+        # from policy — never blanket-approve.
+        return self._default_mutation_decision(has_paths=bool(context.affected_paths))
     
     def request_confirmation(self, confirmation: ToolConfirmation):
         display_confirmation = (
