@@ -126,6 +126,66 @@ class ContextManager:
         )
         self._messages.append(item)
 
+    _INTERRUPTED_TOOL_RESULT = "Tool call interrupted; no result was recorded."
+
+    def repair_dangling_tool_calls(self) -> int:
+        """Backfill synthetic tool results for assistant tool_calls that have no
+        matching tool message.
+
+        A run interrupted between recording the assistant message and recording
+        its tool results (crash, cancel, resume mid-turn) leaves a transcript
+        that OpenAI-compatible providers reject. This inserts a placeholder tool
+        result for each unmatched tool_call_id, immediately after the assistant
+        message that requested it. Returns the number of results inserted.
+        """
+        repaired = 0
+        new_messages: list[MessageItem] = []
+        index = 0
+        total = len(self._messages)
+
+        while index < total:
+            message = self._messages[index]
+            new_messages.append(message)
+
+            if message.role != "assistant" or not message.tool_calls:
+                index += 1
+                continue
+
+            expected_ids = [
+                tc.get("id") for tc in message.tool_calls if tc.get("id")
+            ]
+
+            # Consume the contiguous run of tool results that follow.
+            satisfied: set[str] = set()
+            cursor = index + 1
+            while cursor < total and self._messages[cursor].role == "tool":
+                follower = self._messages[cursor]
+                new_messages.append(follower)
+                if follower.tool_call_id:
+                    satisfied.add(follower.tool_call_id)
+                cursor += 1
+
+            for tool_call_id in expected_ids:
+                if tool_call_id not in satisfied:
+                    new_messages.append(
+                        MessageItem(
+                            role="tool",
+                            content=self._INTERRUPTED_TOOL_RESULT,
+                            tool_call_id=tool_call_id,
+                            token_count=count_tokens(
+                                self._INTERRUPTED_TOOL_RESULT, self._model_name
+                            ),
+                        )
+                    )
+                    repaired += 1
+
+            index = cursor
+
+        if repaired:
+            self._messages = new_messages
+
+        return repaired
+
     def get_messages(self) -> list[dict[str, Any]]:
         messages = []
         if self._system_prompt:

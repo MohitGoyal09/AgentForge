@@ -11,7 +11,7 @@ from agentforge_harness.utils.redaction import redact_tool_result
 import logging
 
 from agentforge_harness.tools.builtin import get_all_builtin_tools
-from agentforge_harness.tools.subagents import SubagentTool, get_default_subagent_definitions
+from agentforge_harness.tools.subagents import SubagentRunner, SubagentTool, get_default_subagent_definitions
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,10 @@ class ToolRegistry:
         return await self._finish_tool_result(hook_system, name, params, result, tool=tool)
 
 
-def create_default_registry(config: Config) -> ToolRegistry:
+def create_default_registry(
+    config: Config,
+    subagent_runner: SubagentRunner | None = None,
+) -> ToolRegistry:
     from agentforge_harness.tools.subagents import SubagentDefinition
 
     registry = ToolRegistry(config)
@@ -175,7 +178,7 @@ def create_default_registry(config: Config) -> ToolRegistry:
         registry.register(tool_class(config))
 
     for subagent_def in get_default_subagent_definitions():
-        registry.register(SubagentTool(config, subagent_def))
+        registry.register(SubagentTool(config, subagent_def, runner=subagent_runner))
 
     for uc in config.subagents:
         definition = SubagentDefinition(
@@ -186,6 +189,6 @@ def create_default_registry(config: Config) -> ToolRegistry:
             max_turns=uc.max_turns,
             timeout_seconds=uc.timeout_seconds,
         )
-        registry.register(SubagentTool(config, definition))
+        registry.register(SubagentTool(config, definition, runner=subagent_runner))
 
     return registry

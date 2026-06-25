@@ -10,33 +10,54 @@ from agentforge_harness.agent.session import Session
 from agentforge_harness.client.response import StreamEventType, TokenUsage, ToolCall, ToolResultMessage
 from agentforge_harness.config.config import Config
 from agentforge_harness.prompts.system import create_loop_breaker_prompt
-from agentforge_harness.tools.base import ToolConfirmation, ToolResult
+from agentforge_harness.tools.base import ToolConfirmation, ToolKind, ToolResult
 from agentforge_harness.utils.redaction import redact_tool_params
 
 logger = logging.getLogger(__name__)
 
 
 class Agent:
-    def __init__(self, config: Config, confirmation_callback: Callable[[ToolConfirmation], bool] | None = None):
+    def __init__(
+        self,
+        config: Config,
+        confirmation_callback: Callable[[ToolConfirmation], bool] | None = None,
+        record_events: bool = True,
+    ):
         self.config = config
         self.session: Session | None = Session(self.config)
         self.session.approval_manager.confirmation_callback = confirmation_callback
+        self._record_events = record_events
+
+    def _record(self, event: AgentEvent) -> None:
+        """Persist an event. Lives in the agent so embedded (non-CLI) usage is
+        logged too. Never lets a persistence failure crash the run."""
+        if not self._record_events or not self.session:
+            return
+        try:
+            self.session.record_event(event.type.value, event.data)
+        except Exception:
+            logger.warning("Failed to record event %s", event.type, exc_info=True)
 
     async def run(self, message: str):
         await self.session.hook_system.trigger_before_agent(message)
-        yield AgentEvent.agents_start(message)
+        start_event = AgentEvent.agents_start(message)
+        self._record(start_event)
+        yield start_event
         self.session.context_manager.add_user_message(message)
         self.session.loop_detector.clear()
 
         final_response: str | None = None
 
         async for event in self._agentic_loop():
+            self._record(event)
             yield event
 
             if event.type == AgentEventType.TEXT_COMPLETE:
                 final_response = event.data.get("content")
         await self.session.hook_system.trigger_after_agent(message, final_response or "")
-        yield AgentEvent.agents_end(final_response)
+        end_event = AgentEvent.agents_end(final_response)
+        self._record(end_event)
+        yield end_event
 
     async def _agentic_loop(self) -> AsyncGenerator[AgentEvent, None]:
         max_turns = self.config.max_turns
@@ -53,8 +74,14 @@ class Agent:
         ]
         circuit_breaker = self.session.circuit_breaker
 
+        # Repair any assistant tool_calls left without results by a prior
+        # interrupted/resumed turn, so the first provider request is well-formed.
+        repaired = self.session.context_manager.repair_dangling_tool_calls()
+        if repaired:
+            logger.info("Repaired %d dangling tool call(s) from a prior run", repaired)
+
         try:
-            for turn_num in range(max_turns):
+            for _turn in range(max_turns):
                 self.session.increment_turn()
 
                 # check context budget and auto-compress if needed
@@ -71,6 +98,10 @@ class Agent:
                         if summary and usage:
                             self.session.context_manager.set_latest_usage(usage)
                             self.session.context_manager.add_usage(usage)
+                            yield AgentEvent.compaction(
+                                message="Compacted older conversation history",
+                                summary_tokens=usage.completion_tokens or None,
+                            )
                         else:
                             # Compaction produced nothing (too few messages or it
                             # failed). Fall back to pruning old tool outputs so we
@@ -98,8 +129,15 @@ class Agent:
                 llm_success = False
                 selected_model = model_chain[0]
 
-                for model_idx, model_name in enumerate(model_chain):
+                yield AgentEvent.message_start(role="assistant")
+
+                for model_name in model_chain:
                     if circuit_breaker.is_open(model_name):
+                        yield AgentEvent.circuit_breaker(
+                            model=model_name,
+                            state="open",
+                            message=f"Skipping {model_name} (circuit open)",
+                        )
                         yield AgentEvent.text_delta(
                             f"\n[Skipping {model_name} (circuit open)]"
                         )
@@ -130,6 +168,12 @@ class Agent:
                                 if attempt < max_llm_retries and circuit_breaker.can_try(model_name):
                                     wait = 2 ** attempt + random.uniform(0, 1)
                                     err_msg = event.error or "unknown error"
+                                    yield AgentEvent.retry(
+                                        model=model_name,
+                                        attempt=attempt + 1,
+                                        error=err_msg,
+                                        delay=wait,
+                                    )
                                     yield AgentEvent.text_delta(
                                         f"\n[{model_name} error: {err_msg}, retrying in {wait:.1f}s...]"
                                     )
@@ -163,6 +207,9 @@ class Agent:
                         break
 
                 if not llm_success:
+                    # Close the assistant message frame opened above before
+                    # bailing, so turn-boundary consumers never see an open frame.
+                    yield AgentEvent.message_end(content="", role="assistant")
                     yield AgentEvent.agents_error(
                         f"All models exhausted. Tried: {', '.join(model_chain)}. "
                         "Check API keys and network connectivity."
@@ -194,6 +241,7 @@ class Agent:
                 )
 
                 yield AgentEvent.text_complete(response_text)
+                yield AgentEvent.message_end(content=response_text, role="assistant")
                 if response_text:
                     self.session.loop_detector.record_action("response", text=response_text)
 
@@ -207,7 +255,15 @@ class Agent:
 
                 tool_call_results: list[ToolResultMessage] = []
 
-                for tool_call in tool_calls:
+                # Read-only tool batches run concurrently (no approval prompts,
+                # no writes). Everything else runs sequentially below.
+                parallel_tools = self._can_parallelize_tools(tool_calls)
+                if parallel_tools:
+                    async for event in self._run_tools_parallel(tool_calls, tool_call_results):
+                        yield event
+
+                sequential_calls = [] if parallel_tools else tool_calls
+                for tool_call in sequential_calls:
                     display_arguments = self._display_tool_arguments(tool_call.arguments)
                     yield AgentEvent.tool_call_start(
                         tool_call.call_id,
@@ -301,6 +357,7 @@ class Agent:
 
                 loop_detection_error = self.session.loop_detector.check_for_loop()
                 if loop_detection_error:
+                    yield AgentEvent.loop_detected(loop_detection_error)
                     loop_prompt = create_loop_breaker_prompt(loop_detection_error)
                     self.session.context_manager.add_user_message(loop_prompt)
                     self.session.loop_detector.clear()
@@ -322,6 +379,74 @@ class Agent:
                 details={"turn": self.session._turn_count},
             )
             return
+
+    def _can_parallelize_tools(self, tool_calls: list[ToolCall]) -> bool:
+        """Only parallelize a batch of 2+ read-only tools in build mode.
+
+        Read tools never require approval and never write, so concurrent
+        execution is safe. Mutating/network tools (which may prompt for approval
+        or write files) and plan mode (which has per-call budget/loop logic) stay
+        sequential.
+        """
+        if len(tool_calls) < 2 or self.session.mode == AgentMode.PLAN:
+            return False
+        for tool_call in tool_calls:
+            tool = self.session.tool_registry.get(tool_call.name)
+            if tool is None or tool.kind != ToolKind.READ:
+                return False
+        return True
+
+    async def _run_tools_parallel(
+        self,
+        tool_calls: list[ToolCall],
+        tool_call_results: list[ToolResultMessage],
+    ):
+        """Execute a read-only tool batch concurrently, preserving event order.
+
+        Emits all tool_call_start events, runs the invocations with
+        asyncio.gather, then emits tool_call_complete and appends results in the
+        original call order. Appends to ``tool_call_results`` in place.
+        """
+        for tool_call in tool_calls:
+            yield AgentEvent.tool_call_start(
+                tool_call.call_id,
+                tool_call.name,
+                self._display_tool_arguments(tool_call.arguments),
+            )
+            self.session.loop_detector.record_action(
+                "tool_call",
+                tool_name=tool_call.name,
+                args=tool_call.arguments,
+            )
+
+        async def _invoke(tc: ToolCall) -> ToolResult:
+            try:
+                return await self.session.tool_registry.invoke(
+                    tc.name,
+                    tc.arguments,
+                    self.config.cwd,
+                    self.session.hook_system,
+                    self.session.approval_manager,
+                )
+            except Exception as exc:
+                logger.warning("Tool '%s' crashed: %s", tc.name, exc)
+                return ToolResult.error_result(f"Tool crashed: {exc}")
+
+        results = await asyncio.gather(*[_invoke(tc) for tc in tool_calls])
+
+        for tool_call, result in zip(tool_calls, results):
+            yield AgentEvent.tool_call_complete(
+                tool_call.call_id,
+                tool_call.name,
+                result,
+            )
+            tool_call_results.append(
+                ToolResultMessage(
+                    tool_call_id=tool_call.call_id,
+                    content=result.to_model_output(),
+                    is_error=not result.success,
+                )
+            )
 
     def _display_tool_arguments(self, arguments: dict) -> dict:
         if not self.config.redaction_enabled:
