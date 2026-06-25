@@ -10,7 +10,7 @@ from agentforge_harness.agent.session import Session
 from agentforge_harness.client.response import StreamEventType, TokenUsage, ToolCall, ToolResultMessage
 from agentforge_harness.config.config import Config
 from agentforge_harness.prompts.system import create_loop_breaker_prompt
-from agentforge_harness.tools.base import ToolConfirmation, ToolResult
+from agentforge_harness.tools.base import ToolConfirmation, ToolKind, ToolResult
 from agentforge_harness.utils.redaction import redact_tool_params
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ class Agent:
         circuit_breaker = self.session.circuit_breaker
 
         try:
-            for turn_num in range(max_turns):
+            for _turn in range(max_turns):
                 self.session.increment_turn()
 
                 # check context budget and auto-compress if needed
@@ -125,7 +125,7 @@ class Agent:
 
                 yield AgentEvent.message_start(role="assistant")
 
-                for model_idx, model_name in enumerate(model_chain):
+                for model_name in model_chain:
                     if circuit_breaker.is_open(model_name):
                         yield AgentEvent.circuit_breaker(
                             model=model_name,
@@ -249,7 +249,15 @@ class Agent:
 
                 tool_call_results: list[ToolResultMessage] = []
 
-                for tool_call in tool_calls:
+                # Read-only tool batches run concurrently (no approval prompts,
+                # no writes). Everything else runs sequentially below.
+                parallel_tools = self._can_parallelize_tools(tool_calls)
+                if parallel_tools:
+                    async for event in self._run_tools_parallel(tool_calls, tool_call_results):
+                        yield event
+
+                sequential_calls = [] if parallel_tools else tool_calls
+                for tool_call in sequential_calls:
                     display_arguments = self._display_tool_arguments(tool_call.arguments)
                     yield AgentEvent.tool_call_start(
                         tool_call.call_id,
@@ -365,6 +373,74 @@ class Agent:
                 details={"turn": self.session._turn_count},
             )
             return
+
+    def _can_parallelize_tools(self, tool_calls: list[ToolCall]) -> bool:
+        """Only parallelize a batch of 2+ read-only tools in build mode.
+
+        Read tools never require approval and never write, so concurrent
+        execution is safe. Mutating/network tools (which may prompt for approval
+        or write files) and plan mode (which has per-call budget/loop logic) stay
+        sequential.
+        """
+        if len(tool_calls) < 2 or self.session.mode == AgentMode.PLAN:
+            return False
+        for tool_call in tool_calls:
+            tool = self.session.tool_registry.get(tool_call.name)
+            if tool is None or tool.kind != ToolKind.READ:
+                return False
+        return True
+
+    async def _run_tools_parallel(
+        self,
+        tool_calls: list[ToolCall],
+        tool_call_results: list[ToolResultMessage],
+    ):
+        """Execute a read-only tool batch concurrently, preserving event order.
+
+        Emits all tool_call_start events, runs the invocations with
+        asyncio.gather, then emits tool_call_complete and appends results in the
+        original call order. Appends to ``tool_call_results`` in place.
+        """
+        for tool_call in tool_calls:
+            yield AgentEvent.tool_call_start(
+                tool_call.call_id,
+                tool_call.name,
+                self._display_tool_arguments(tool_call.arguments),
+            )
+            self.session.loop_detector.record_action(
+                "tool_call",
+                tool_name=tool_call.name,
+                args=tool_call.arguments,
+            )
+
+        async def _invoke(tc: ToolCall) -> ToolResult:
+            try:
+                return await self.session.tool_registry.invoke(
+                    tc.name,
+                    tc.arguments,
+                    self.config.cwd,
+                    self.session.hook_system,
+                    self.session.approval_manager,
+                )
+            except Exception as exc:
+                logger.warning("Tool '%s' crashed: %s", tc.name, exc)
+                return ToolResult.error_result(f"Tool crashed: {exc}")
+
+        results = await asyncio.gather(*[_invoke(tc) for tc in tool_calls])
+
+        for tool_call, result in zip(tool_calls, results):
+            yield AgentEvent.tool_call_complete(
+                tool_call.call_id,
+                tool_call.name,
+                result,
+            )
+            tool_call_results.append(
+                ToolResultMessage(
+                    tool_call_id=tool_call.call_id,
+                    content=result.to_model_output(),
+                    is_error=not result.success,
+                )
+            )
 
     def _display_tool_arguments(self, arguments: dict) -> dict:
         if not self.config.redaction_enabled:
