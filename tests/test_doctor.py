@@ -60,6 +60,12 @@ def test_doctor_human_output_is_grouped_and_actionable(monkeypatch, tmp_path: Pa
     for env_name in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"):
         monkeypatch.setenv(env_name, "")
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    # Isolate from any real user config on the host machine, otherwise the
+    # report is considered "initialized" and this assertion is environment-dependent.
+    monkeypatch.setattr(
+        "agentforge_harness.cli.doctor.get_system_config_path",
+        lambda: tmp_path / "missing-config.toml",
+    )
     output = io.StringIO()
     console = Console(file=output, theme=AGENT_THEME, width=100, color_system=None)
 
@@ -347,6 +353,12 @@ def test_agentforge_doctor_cli_fails_on_missing_key(monkeypatch, tmp_path: Path)
 
 def test_agentforge_doctor_cli_fails_fast_when_setup_is_missing(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("agentforge_harness.cli.doctor.get_data_dir", lambda: tmp_path / "data")
+    # Isolate from any real user config on the host machine so "setup missing"
+    # is actually the condition under test.
+    monkeypatch.setattr(
+        "agentforge_harness.cli.doctor.get_system_config_path",
+        lambda: tmp_path / "missing-config.toml",
+    )
 
     result = CliRunner().invoke(
         cli,
