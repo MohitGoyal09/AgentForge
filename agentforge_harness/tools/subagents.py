@@ -1,9 +1,16 @@
 from pydantic import BaseModel , Field
 from agentforge_harness.config.config import Config
+from agentforge_harness.agent.events import AgentEvent, AgentEventType
 from agentforge_harness.tools.base import Tool, ToolInvocation, ToolResult
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, AsyncIterator, Callable
 import asyncio
+
+# A runner produces the event stream for a subagent run, given the subagent's
+# config and prompt. Injected by the composition root so the tools layer never
+# imports the Agent class (which would re-introduce the agent <-> tools cycle).
+SubagentRunner = Callable[[Config, str], AsyncIterator[AgentEvent]]
+
 
 class SubagentParams(BaseModel):
     goal: str = Field(
@@ -22,9 +29,15 @@ class SubagentDefinition:
 
 
 class SubagentTool(Tool):
-    def __init__(self, config: Config, definition: SubagentDefinition):
+    def __init__(
+        self,
+        config: Config,
+        definition: SubagentDefinition,
+        runner: SubagentRunner | None = None,
+    ):
         super().__init__(config)
         self.definition = definition
+        self._runner = runner
 
     @property
     def name(self) -> str:
@@ -52,13 +65,15 @@ class SubagentTool(Tool):
         return any(tool_name in mutating_tools for tool_name in self.definition.allowed_tools)
     
     async def execute(self, invocation: ToolInvocation) -> ToolResult:
-        from agentforge_harness.agent.agent import Agent
-        from agentforge_harness.agent.events import AgentEventType
+        if self._runner is None:
+            return ToolResult.error_result(
+                "Subagent runner is not configured for this tool"
+            )
 
         params = SubagentParams(**invocation.params)
         if not params.goal:
             return ToolResult.error_result("No goal specified for sub-agent")
-        
+
         config_dict = self.config.to_dict()
         config_dict['max_turns'] = self.definition.max_turns
         if self.definition.allowed_tools:
@@ -90,32 +105,31 @@ class SubagentTool(Tool):
         event_handler = invocation._event_handler
 
         try:
-            async with Agent(subagent_config) as agent:
-                deadline = (
-                    asyncio.get_event_loop().time() + self.definition.timeout_seconds
-                )
-                async for event in agent.run(prompt):
-                    if asyncio.get_event_loop().time() > deadline:
-                        terminate_response = "timeout"
-                        final_response = "Sub-agent timed out"
-                        break
+            deadline = (
+                asyncio.get_event_loop().time() + self.definition.timeout_seconds
+            )
+            async for event in self._runner(subagent_config, prompt):
+                if asyncio.get_event_loop().time() > deadline:
+                    terminate_response = "timeout"
+                    final_response = "Sub-agent timed out"
+                    break
 
-                    if event_handler:
-                        await event_handler(event)
+                if event_handler:
+                    await event_handler(event)
 
-                    if event.type == AgentEventType.TEXT_DELTA:
-                        streamed_text += event.data.get("content", "")
-                    elif event.type == AgentEventType.TOOL_CALL_START:
-                        tool_calls.append(event.data.get("name", "unknown"))
-                    elif event.type == AgentEventType.TEXT_COMPLETE:
-                        final_response = event.data.get("content") or streamed_text
-                    elif event.type == AgentEventType.AGENT_END:
-                        final_response = final_response or event.data.get("response") or streamed_text
-                    elif event.type == AgentEventType.AGENT_ERROR:
-                        terminate_response = "error"
-                        error = event.data.get('error', 'Unknown')
-                        final_response = f"Sub-agent error: {error}"
-                        break
+                if event.type == AgentEventType.TEXT_DELTA:
+                    streamed_text += event.data.get("content", "")
+                elif event.type == AgentEventType.TOOL_CALL_START:
+                    tool_calls.append(event.data.get("name", "unknown"))
+                elif event.type == AgentEventType.TEXT_COMPLETE:
+                    final_response = event.data.get("content") or streamed_text
+                elif event.type == AgentEventType.AGENT_END:
+                    final_response = final_response or event.data.get("response") or streamed_text
+                elif event.type == AgentEventType.AGENT_ERROR:
+                    terminate_response = "error"
+                    error = event.data.get('error', 'Unknown')
+                    final_response = f"Sub-agent error: {error}"
+                    break
         except Exception as e:
             terminate_response = "error"
             error = str(e)

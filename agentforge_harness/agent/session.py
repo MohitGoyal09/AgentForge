@@ -3,6 +3,7 @@ import json
 import uuid
 from typing import Any
 from agentforge_harness.agent.modes import AgentMode
+from agentforge_harness.agent.subagent_runner import run_subagent
 from agentforge_harness.client.llm_client import LLMClient
 from agentforge_harness.config.config import Config, ModelProvider
 from agentforge_harness.config.loader import get_data_dir
@@ -23,7 +24,10 @@ class Session:
     def __init__(self, config: Config, persistence: PersistenceManager | None = None):
         self.config = config
         self.client = LLMClient(config=config)
-        self.tool_registry = create_default_registry(config=config)
+        self.tool_registry = create_default_registry(
+            config=config,
+            subagent_runner=run_subagent,
+        )
         self.context_manager: ContextManager | None = None
         self.discovery_manager = ToolDiscoveryManager(
             self.config,
