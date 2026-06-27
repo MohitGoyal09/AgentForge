@@ -129,7 +129,7 @@ class ContextManager:
         self._append_entry_for_message(item)
 
     def add_assistant_message(
-        self, content: str, tool_calls: list[dict[str, Any]]
+        self, content: str | None, tool_calls: list[dict[str, Any]]
     ) -> None:
         item = MessageItem(
             role="assistant",
