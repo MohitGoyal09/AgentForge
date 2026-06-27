@@ -65,6 +65,9 @@ class Agent:
             # Clear any cancellation so a stale flag from this run does not
             # carry over to the next run() call.
             self.session.reset_cancel()
+            # Discard any unprocessed steers — prevents ghost context from
+            # leaking into the next run() call after a cancel or error.
+            self.session._steering_queue.clear()
 
     async def _agentic_loop(self) -> AsyncGenerator[AgentEvent, None]:
         max_turns = self.config.max_turns
@@ -287,6 +290,15 @@ class Agent:
                         self.session.context_manager.add_usage(usage)
 
                     self.session.context_manager.prune_tool_outputs()
+
+                    # Follow-up drain: inject queued follow-up as a new user message
+                    # and loop again rather than ending the run.
+                    _follow_up = self.session.pop_latest_follow_up_message()
+                    if _follow_up is not None:
+                        self.session.context_manager.add_user_message(_follow_up)
+                        yield AgentEvent.queue_update(steering=[], follow_up=[_follow_up])
+                        continue
+
                     return
 
                 tool_call_results: list[ToolResultMessage] = []
@@ -376,6 +388,15 @@ class Agent:
                         tool_result.tool_call_id,
                         tool_result.content,
                     )
+
+                # Steer drain: inject any steering message the user queued while
+                # this tool batch was running.  Injection happens here — after all
+                # tool results are committed — so the transcript is coherent
+                # (assistant + tool_calls + tool_results all present).
+                _steer = self.session._steering_queue.pop_steer()
+                if _steer is not None:
+                    self.session.context_manager.add_user_message(_steer)
+                    yield AgentEvent.queue_update(steering=[_steer], follow_up=[])
 
                 if force_plan_response and self.session.mode == AgentMode.PLAN:
                     self.session.context_manager.add_user_message(
