@@ -18,7 +18,7 @@ from agentforge_harness.config.config import (
     ModelConfig,
     ModelProvider,
 )
-from agentforge_harness.ui.tui import AGENT_THEME
+from agentforge_harness.ui.plain import AGENT_THEME
 
 
 def _statuses(report):

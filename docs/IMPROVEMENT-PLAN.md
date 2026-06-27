@@ -8,9 +8,9 @@
 
 ---
 
-## 1. Current status (as of PR #7 merged)
+## 1. Current status (as of PR #10 merged)
 
-`master` is green: **413 tests pass** (`/.venv/bin/python -m pytest -q`).
+`master` is green: **489 tests pass** (`/.venv/bin/python -m pytest -q`).
 
 | Phase / item | Status | PR |
 |---|---|---|
@@ -22,13 +22,13 @@
 | **Audit bug fixes A–J** (thinking-delta regression, MCP, path traversal, approval bypass, SSRF, …) | ✅ merged | #6 |
 | **P2.1** — append-only session tree: foundation | ✅ merged | #4 |
 | **P2.1** — session tree live integration + audit fixes | ✅ merged | #7 |
-| **P2.1 layer 4** — branching API (`tree_choices`/`branch_to_entry`) | ✅ merged | — |
-| **P2.3b** — command registry (`handle_command → CommandResult`) | 🔄 in progress | — |
-| **P2.3c** — re-entrant steering / follow-up queue (`session.prompt(steer/follow_up)`) | ⬜ pending (highest risk) | — |
-| **P2.4** — secondary hardening + remaining LOW bugs | ⬜ pending | — |
-| **Phase 3** — Textual TUI replacement | ⬜ blocked on P2.3b/c + P2.1 layer 4 | — |
+| **P2.1 layer 4** — branching API (`tree_choices`/`branch_to_entry`) | ✅ merged | #8 |
+| **P2.3b** — command registry (`handle_command → CommandResult`) | ✅ merged | #8 |
+| **P2.3c** — re-entrant steering / follow-up queue (`session.prompt(steer/follow_up)`) | ✅ merged | #9 |
+| **P2.4** — secondary hardening + remaining LOW bugs | ✅ merged | #10 |
+| **Phase 3** — Textual TUI replacement | ⬜ pending | — |
 
-**Recommended next step:** P2.1 layer 4 (branching API) — it completes the session-tree feature and is lower risk than steering.
+**Recommended next step:** Phase 3 — Textual TUI replacement (all blockers resolved).
 
 ---
 
@@ -110,35 +110,56 @@ agentforge_harness/
 
 **P2.1 (#4, #7):** append-only `SessionEntry` tree (model + pure reconstruction) and JSONL store + migration; live integration with faithful non-destructive compaction on restore, `/new` reset, flat-restore seeding, dangling-leaf graceful fallback.
 
+**P2.3b (#8):** `CommandRegistry` replaces the CLI's `if name == "/x"` chain; every handler returns a typed `CommandResult`; CLI becomes a thin render layer. 21 unit tests.
+
+**P2.3c (#9):** `SteeringQueue` (two-lane FIFO deque); `Session.prompt(text, mode)` enqueues messages; agent loop drains the steer lane at every tool-batch boundary and the follow-up lane at turn-end; `/steer` and `/follow-up` CLI commands; `asyncio.to_thread` wraps blocking `console.input()`; `CancelledError` re-raised (never swallowed). User-created tools can import `agentforge_harness.*` (sys.path fix in discovery). Tests: `test_steering_queue.py`, `test_session_prompt.py`.
+
+**P2.4 (#10):** `MCPClient.reconnect()` with exponential backoff + stale-tool-state clear; `SkillManager.get_active_allowed_tools()` union enforcement wired into `Session.activate_skill/deactivate_skill`; 32 000-char cap on injected skill bodies; per-run UUID threaded into `AGENT_START`/`AGENT_END` events + JSONL diagnostics via `PersistenceManager.append_run_diagnostic()`; `context_manager=None` guards on `/stats` and `/report`; `schema_version` future-version rejection in `load_session()` and `load_checkpoint()`; `add_assistant_message(content: str | None, ...)` annotation fix. 76 new tests.
+
 ---
 
 ## 5. Remaining work (specs)
 
-### P2.1 layer 4 — Branching API  ⬅ recommended next
-Make the tree user-visible. Build on `session_tree.py`/`session_store.py`/`ContextManager`.
-- `Session.tree_choices() -> list[...]`: list branchable points = the `KIND_MESSAGE` entries on the **active path** (id, short preview of content, role, position). Read from `context_manager.get_entries()` + `active_leaf_id`/`path_to_entry`.
-- `Session.branch_to_entry(entry_id, *, summarize=False)`: append a `KIND_LEAF` entry pointing at `entry_id` (the new active tip), then `context_manager.load_from_entries(entries)` so the live messages become that branch's path. Persist via `tree_store.write_all`. Optional: when `summarize=True`, record a `BranchSummaryEntry`/compaction of the abandoned tail.
-- Add a `/branch` (or `/rewind`) CLI command listing choices and switching.
-- **Tests:** branch to a past message → live messages == that path; new messages after branching extend the new branch; original branch still reconstructable from its leaf; save→restore preserves the active branch.
+### P2.1 layer 4 — Branching API  ✅ done (#8)
+`Session.tree_choices()` / `Session.branch_to_entry(entry_id)` + `/branch` CLI command. Branch to a past message, live messages reconstruct that path, new messages extend the new branch, save→restore preserves active branch.
 
-### P2.3b — Command registry
-Refactor the CLI's `if name == "/x"` chain (`cli/commands.py`) into a registry that maps command → handler and returns a structured `CommandResult` (fields like `exit`, `clear`, `notice`, `compact`, `switch_mode`, `error`, …) so both the CLI and the future TUI share one command layer. `Session.handle_command(text) -> CommandResult`. Keep behavior identical; this is enabling, not behavioral. Risk: medium (touches every command).
+### P2.3b — Command registry  ✅ done (#8)
+`CommandRegistry` + `CommandResult` replace the CLI `if/elif` chain. CLI is now a thin render layer.
 
-### P2.3c — Re-entrant steering / follow-up queue  (highest risk)
-`Session.prompt(text, streaming_behavior="steer"|"follow_up")` with an internal queue so the user can inject a message mid-run without cancelling: *steer* = insert after the current tool batch; *follow_up* = run when the agent would otherwise stop. Emit `QueueUpdateEvent` (already defined in `events.py`) on queue changes. Also expose `is_running` (exists), `pop_latest_follow_up_message()`. No existing base to build on — design carefully, lots of edge cases.
+### P2.3c — Re-entrant steering / follow-up queue  ✅ done (#9)
+`SteeringQueue` two-lane FIFO; `Session.prompt(text, mode)` enqueues; agent drains at tool-batch boundaries (steer) and turn-end (follow-up); `asyncio.to_thread` for blocking input; `CancelledError` re-raised.
 
-### P2.4 — Secondary hardening + remaining LOW bugs
-- MCP reconnection/backoff (a dropped server is permanently `ERROR`).
-- Enforce skills `allowed_tools`; cap injected `SKILL.md` body size.
-- Structured per-run diagnostics (UUID per run → JSONL) for debuggability.
-- **Deferred LOW bugs (from the audit, still open):**
-  - CLI `/stats`,`/report`,`/save`,`/checkpoint` lack a `context_manager`-None guard (only bites before `initialize()`).
-  - `persistence.py` `schema_version` is read but never validated/migrated (`load_session`).
-  - `agent.add_assistant_message` typing: param is `str` but called with `str | None` (works, but annotation lies).
-  - (Fixed already in #7: atomic `memory.json` write; `write_file` bare excepts.)
+### P2.4 — Secondary hardening  ✅ done (#10)
+All items resolved: MCP reconnect backoff, `allowed_tools` enforcement, 32 k skill-body cap, per-run UUID/JSONL diagnostics, `context_manager=None` guards, schema version validation, type annotation fix.
 
-### Phase 3 — Textual TUI replacement (blocked)
-Replace the Rich print-renderer (`ui/tui.py`) with a full Textual app: non-blocking input, scrollback, slash + `@file` autocomplete, sidebar (model/provider/thinking/context tokens), session/tree pickers, steering input, thinking panel. **Depends on:** typed events ✅, session contract (P2.3b command registry + P2.3c steering + accessors ✅), and the branching API (P2.1 layer 4) for the tree picker. Keep a `--plain` fallback renderer. Preserve the current per-tool rich rendering.
+---
+
+### Phase 3 — Textual TUI replacement  ⬅ recommended next
+
+All prerequisites met. Replace the Rich print-renderer (`ui/tui.py`) with a full [Textual](https://textual.textualize.io/) app.
+
+**Capabilities to build:**
+- Non-blocking input field (no more `asyncio.to_thread` hack)
+- Scrollback panel for assistant/tool output
+- Slash + `@file` autocomplete in the input bar
+- Sidebar: model / provider / thinking level / context-token meter
+- Session picker (list + switch)
+- Tree/branch picker (uses `Session.tree_choices()` + `Session.branch_to_entry()`)
+- Steering input (uses `Session.prompt(text, "steer")` / `"follow_up"`)
+- Thinking panel (collapsible, streams `THINKING_DELTA` events)
+- Tool call panels (expandable diff/output, success/error styling)
+
+**Architecture constraints:**
+- `CommandResult` is the command layer — the TUI calls `get_registry().dispatch(...)` exactly as the CLI does today; no business logic in the TUI
+- All events consumed via `AgentEvent` typed stream (`agent/events.py`) — no raw string parsing
+- Keep a `--plain` / `--no-tui` flag that falls back to the current Rich renderer (`ui/tui.py`) for headless/pipe use
+- The current `ui/tui.py` should be renamed `ui/plain.py`; `ui/tui.py` becomes the Textual app
+- New dependency: `textual` (add to `pyproject.toml`)
+
+**Tests:**
+- Unit-test the TUI's event-to-widget mapping in isolation (mock widget tree)
+- Integration-test the `--plain` fallback path to avoid regressions
+- Snapshot tests for the sidebar stat display and tool-call panels
 
 ---
 

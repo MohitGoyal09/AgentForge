@@ -17,7 +17,7 @@ from agentforge_harness.cli.command_registry import CommandContext, get_registry
 from agentforge_harness.cli.command_result import CommandResult
 from agentforge_harness.config.config import Config
 from agentforge_harness.tools.builtin.todo import TodosTool
-from agentforge_harness.ui.tui import TUI, get_console
+from agentforge_harness.ui.plain import TUI, PlainTUI, get_console
 
 console = get_console()
 
