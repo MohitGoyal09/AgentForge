@@ -64,10 +64,10 @@ class TranscriptMessageWidget(Static):
         self._theme = theme
         self._show_tool_results = show_tool_results
         self._show_thinking = show_thinking
-        content = self._render_content(item)
+        content = self._build_markup(item)
         super().__init__(content, **kwargs)
 
-    def _render_content(self, item: ChatItem) -> str:
+    def _build_markup(self, item: ChatItem) -> str:
         label = _format_role_label(item.role, self._theme)
         body = _item_to_markup(
             item,
@@ -79,7 +79,7 @@ class TranscriptMessageWidget(Static):
 
     def update_item(self, item: ChatItem) -> None:
         self._item = item
-        self.update(self._render_content(item))
+        self.update(self._build_markup(item))
 
 
 # ---------------------------------------------------------------------------
