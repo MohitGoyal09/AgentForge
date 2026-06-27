@@ -65,6 +65,9 @@ class Agent:
             # Clear any cancellation so a stale flag from this run does not
             # carry over to the next run() call.
             self.session.reset_cancel()
+            # Discard any unprocessed steers — prevents ghost context from
+            # leaking into the next run() call after a cancel or error.
+            self.session._steering_queue.clear()
 
     async def _agentic_loop(self) -> AsyncGenerator[AgentEvent, None]:
         max_turns = self.config.max_turns
@@ -287,6 +290,15 @@ class Agent:
                         self.session.context_manager.add_usage(usage)
 
                     self.session.context_manager.prune_tool_outputs()
+
+                    # Follow-up drain: inject queued follow-up as a new user message
+                    # and loop again rather than ending the run.
+                    _follow_up = self.session.pop_latest_follow_up_message()
+                    if _follow_up is not None:
+                        self.session.context_manager.add_user_message(_follow_up)
+                        yield AgentEvent.queue_update(steering=[], follow_up=[_follow_up])
+                        continue
+
                     return
 
                 tool_call_results: list[ToolResultMessage] = []
@@ -377,12 +389,23 @@ class Agent:
                         tool_result.content,
                     )
 
+                # Steer drain: pop any steering message queued while this tool
+                # batch ran.  Injection happens after ALL tool results are committed
+                # so the transcript is coherent (assistant + tool_calls + results).
+                # We do NOT inject yet if force_plan_response or loop_detection will
+                # add their own user message — consecutive user messages are invalid.
+                _steer = self.session._steering_queue.pop_steer()
+
                 if force_plan_response and self.session.mode == AgentMode.PLAN:
-                    self.session.context_manager.add_user_message(
+                    plan_notice = (
                         "SYSTEM NOTICE: Plan mode has enough context or is repeating tool exploration. "
                         "Do not call more tools. Produce the final plan now, with goal, approach, steps, "
                         "files to change, open questions, and the reminder to switch to /build for implementation."
                     )
+                    combined = f"{_steer}\n\n{plan_notice}" if _steer else plan_notice
+                    self.session.context_manager.add_user_message(combined)
+                    if _steer:
+                        yield AgentEvent.queue_update(steering=[_steer], follow_up=[])
                     self.session.loop_detector.clear()
                     self.session.context_manager.prune_tool_outputs()
                     continue
@@ -395,10 +418,18 @@ class Agent:
                 if loop_detection_error:
                     yield AgentEvent.loop_detected(loop_detection_error)
                     loop_prompt = create_loop_breaker_prompt(loop_detection_error)
-                    self.session.context_manager.add_user_message(loop_prompt)
+                    combined = f"{_steer}\n\n{loop_prompt}" if _steer else loop_prompt
+                    self.session.context_manager.add_user_message(combined)
+                    if _steer:
+                        yield AgentEvent.queue_update(steering=[_steer], follow_up=[])
                     self.session.loop_detector.clear()
                     self.session.context_manager.prune_tool_outputs()
                     continue
+
+                # Normal path: no system override — inject steer if present.
+                if not self.session.cancel_requested and _steer is not None:
+                    self.session.context_manager.add_user_message(_steer)
+                    yield AgentEvent.queue_update(steering=[_steer], follow_up=[])
 
                 self.session.context_manager.prune_tool_outputs()
 

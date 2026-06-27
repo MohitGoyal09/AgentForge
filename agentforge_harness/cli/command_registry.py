@@ -626,7 +626,7 @@ async def _h_history(argument: str, ctx: CommandContext) -> CommandResult:
     n = 10
     if argument:
         try:
-            n = int(argument)
+            n = max(int(argument), 1)
         except ValueError:
             pass
     recent = msgs[-n:] if len(msgs) > n else msgs
@@ -722,6 +722,24 @@ async def _h_export(argument: str, ctx: CommandContext) -> CommandResult:
     return CommandResult(notice=f"Exported session to: {out_path}", notice_title="Export")
 
 
+async def _h_steer(argument: str, ctx: CommandContext) -> CommandResult:
+    if not ctx.session:
+        return CommandResult(error="No active session")
+    if not argument:
+        return CommandResult(error="Usage: /steer <message>")
+    ctx.session.prompt(argument.strip(), "steer")
+    return CommandResult(notice=f"Steer queued: {argument[:80]}", notice_title="Steering")
+
+
+async def _h_follow_up(argument: str, ctx: CommandContext) -> CommandResult:
+    if not ctx.session:
+        return CommandResult(error="No active session")
+    if not argument:
+        return CommandResult(error="Usage: /follow-up <message>")
+    ctx.session.prompt(argument.strip(), "follow_up")
+    return CommandResult(notice=f"Follow-up queued: {argument[:80]}", notice_title="Follow-up")
+
+
 async def _h_branch(argument: str, ctx: CommandContext) -> CommandResult:
     if not ctx.session:
         return CommandResult(error="No active session")
@@ -804,6 +822,8 @@ def build_registry() -> CommandRegistry:
     registry.register(_h_stats, "/stats")
     registry.register(_h_export, "/export")
     registry.register(_h_branch, "/branch", "/rewind")
+    registry.register(_h_steer, "/steer")
+    registry.register(_h_follow_up, "/follow-up")
     return registry
 
 

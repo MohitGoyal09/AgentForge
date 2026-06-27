@@ -6,6 +6,7 @@ logic lives in command_registry.py; this file only drives the TUI.
 """
 from __future__ import annotations
 
+import asyncio
 import difflib
 from typing import Any
 
@@ -62,7 +63,7 @@ class CLI:
                         f" [{todo_style}]● {todo_count}[/{todo_style}]"
                         f" [user]❯[/user] "
                     )
-                    user_input = console.input(prompt).strip()
+                    user_input = (await asyncio.to_thread(console.input, prompt)).strip()
                     if not user_input:
                         continue
                     if user_input.startswith("/"):
@@ -75,6 +76,8 @@ class CLI:
 
                 except KeyboardInterrupt:
                     console.print("\n[dim]Use /exit to quit[/dim]")
+                except asyncio.CancelledError:
+                    raise
                 except EOFError:
                     break
         console.print("\n[dim]GoodBye![/dim]")
