@@ -242,20 +242,31 @@ def active_leaf_id(entries: list[SessionEntry]) -> str | None:
     """Return the id that represents the current active tip of the DAG.
 
     Resolution order:
-    1. The ``entry_id`` target of the last KIND_LEAF entry in *entries*.
-    2. The id of the last KIND_MESSAGE or KIND_COMPACTION entry in *entries*.
-    3. None when *entries* is empty or contains no messages/compactions/leaf pointers.
+    1. If any KIND_MESSAGE or KIND_COMPACTION entries appear *after* the last
+       KIND_LEAF, the last such entry is the tip (it represents a new branch
+       that was extended after rewinding).
+    2. Otherwise the ``entry_id`` target of the last KIND_LEAF is the tip.
+    3. The id of the last KIND_MESSAGE or KIND_COMPACTION entry when no leaf
+       pointer exists.
+    4. None when *entries* is empty or contains none of the above.
     """
     last_leaf_target: str | None = None
+    last_leaf_pos: int = -1
     last_message_or_compaction_id: str | None = None
+    last_message_or_compaction_pos: int = -1
 
-    for entry in entries:
+    for i, entry in enumerate(entries):
         if entry.kind == KIND_LEAF:
             last_leaf_target = entry.payload.get("entry_id")
+            last_leaf_pos = i
         elif entry.kind in (KIND_MESSAGE, KIND_COMPACTION):
             last_message_or_compaction_id = entry.id
+            last_message_or_compaction_pos = i
 
     if last_leaf_target is not None:
+        # A message/compaction that was appended after the leaf is the new tip.
+        if last_message_or_compaction_pos > last_leaf_pos:
+            return last_message_or_compaction_id
         return last_leaf_target
     return last_message_or_compaction_id
 

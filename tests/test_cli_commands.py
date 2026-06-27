@@ -89,7 +89,7 @@ async def test_models_command_lists_models_for_current_provider(monkeypatch):
             message="Curated suggestions",
         )
 
-    monkeypatch.setattr("agentforge_harness.cli.commands.list_models_for_config", fake_list_models)
+    monkeypatch.setattr("agentforge_harness.cli.command_registry.list_models_for_config", fake_list_models)
 
     assert await cli._handle_command("/models") is True
 
@@ -111,7 +111,7 @@ async def test_model_list_alias_lists_models(monkeypatch):
             live=False,
         )
 
-    monkeypatch.setattr("agentforge_harness.cli.commands.list_models_for_config", fake_list_models)
+    monkeypatch.setattr("agentforge_harness.cli.command_registry.list_models_for_config", fake_list_models)
 
     assert await cli._handle_command("/model list") is True
 
