@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.agent.subagent_runner import run_subagent
-from agentforge_harness.agent.session_store import SessionTreeStore
+from agentforge_harness.agent.session_store import SessionTreeStore, migrate_snapshot_to_entries
 from agentforge_harness.client.llm_client import LLMClient
 from agentforge_harness.client.thinking import ThinkingLevel
 from agentforge_harness.config.config import Config, ModelProvider
@@ -267,9 +267,18 @@ class Session:
         # Prefer reconstructing from the session tree when one exists.
         entries = self.tree_store.read_all(snapshot.session_id)
         if entries:
-            self.context_manager.load_from_entries(entries)
+            try:
+                self.context_manager.load_from_entries(entries)
+            except (ValueError, KeyError) as exc:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Session tree restore failed (%s); falling back to flat snapshot.", exc
+                )
+                migrated = migrate_snapshot_to_entries(snapshot)
+                self.context_manager.load_from_entries(migrated)
         else:
-            self.context_manager.restore_messages(snapshot.messages)
+            migrated = migrate_snapshot_to_entries(snapshot)
+            self.context_manager.load_from_entries(migrated)
 
         self.context_manager.restore_usage(snapshot.latest_usage, snapshot.total_usage)
         self.context_manager.refresh_system_prompt(

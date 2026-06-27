@@ -11,7 +11,8 @@ import pytest
 from agentforge_harness.agent.persistence import PersistenceManager, SessionSnapshot
 from agentforge_harness.agent.session import Session
 from agentforge_harness.agent.session_store import SessionTreeStore
-from agentforge_harness.agent.session_tree import SessionEntry, KIND_COMPACTION, KIND_MESSAGE
+from agentforge_harness.agent.session_tree import SessionEntry, KIND_COMPACTION, KIND_LEAF, KIND_MESSAGE, COMPACTION_PREFIX
+from agentforge_harness.agent.session_store import migrate_snapshot_to_entries
 from agentforge_harness.client.response import TokenUsage
 from agentforge_harness.config.config import Config
 from agentforge_harness.context.manager import ContextManager
@@ -266,3 +267,233 @@ async def test_restore_without_tree_falls_back_to_flat(tmp_path):
     chat_msgs = [m for m in msgs if m["role"] != "system"]
     assert len(chat_msgs) == 1
     assert chat_msgs[0]["content"] == "flat message"
+
+
+# ---------------------------------------------------------------------------
+# Test 6: compaction save->restore roundtrip matches live messages
+# ---------------------------------------------------------------------------
+
+
+async def test_compaction_save_restore_matches_live(tmp_path):
+    """After a compaction, load_from_entries must reproduce the live message list."""
+    manager = _make_manager(tmp_path)
+
+    for i in range(8):
+        manager.add_user_message(f"user message {i}")
+
+    compactor = _FakeCompactor(summary="SUMMARY")
+    await manager.compress_old_messages(compactor)
+
+    # Capture the live state
+    live = [m.content for m in manager._messages]
+
+    # Save entries then restore into a fresh manager
+    entries = manager.get_entries()
+    manager2 = _make_manager(tmp_path)
+    manager2.load_from_entries(entries)
+
+    restored = [m.content for m in manager2._messages]
+
+    assert restored == live, (
+        f"Restored messages do not match live.\n"
+        f"Live:     {live}\n"
+        f"Restored: {restored}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 7: double compaction after restore
+# ---------------------------------------------------------------------------
+
+
+async def test_double_compaction_after_restore(tmp_path):
+    """After restoring from entries, a second compaction must still reconstruct faithfully."""
+    manager = _make_manager(tmp_path)
+
+    for i in range(8):
+        manager.add_user_message(f"msg {i}")
+
+    compactor = _FakeCompactor(summary="FIRST SUMMARY")
+    await manager.compress_old_messages(compactor)
+
+    entries = manager.get_entries()
+    manager2 = _make_manager(tmp_path)
+    manager2.load_from_entries(entries)
+
+    # Add more messages and compact again
+    for i in range(8, 14):
+        manager2.add_user_message(f"msg {i}")
+
+    compactor2 = _FakeCompactor(summary="SECOND SUMMARY")
+    await manager2.compress_old_messages(compactor2)
+
+    live2 = [m.content for m in manager2._messages]
+
+    entries2 = manager2.get_entries()
+    manager3 = _make_manager(tmp_path)
+    manager3.load_from_entries(entries2)
+
+    restored2 = [m.content for m in manager3._messages]
+
+    assert restored2 == live2, (
+        f"Double-compaction restored messages do not match live.\n"
+        f"Live:     {live2}\n"
+        f"Restored: {restored2}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 8: clear() resets the entry log
+# ---------------------------------------------------------------------------
+
+
+def test_clear_resets_entry_log(tmp_path):
+    """clear() must reset _entries and _last_entry_id so new messages form a fresh chain."""
+    manager = _make_manager(tmp_path)
+
+    manager.add_user_message("before clear")
+    manager.add_assistant_message("reply", [])
+
+    manager.clear()
+
+    manager.add_user_message("after clear")
+
+    entries = manager.get_entries()
+    assert len(entries) == 1, f"Expected 1 entry after clear+add, got {len(entries)}"
+    assert entries[0].parent_id is None, "First entry after clear must have parent_id=None"
+    assert entries[0].payload.get("content") == "after clear"
+
+
+# ---------------------------------------------------------------------------
+# Test 9: flat restore seeds entries then appends
+# ---------------------------------------------------------------------------
+
+
+async def test_flat_restore_seeds_entries_then_appends(tmp_path):
+    """Session.restore_snapshot with no tree file must seed entries via migration,
+    so subsequent messages append to the chain and a second restore sees full history."""
+    import datetime as _dt
+
+    persistence = PersistenceManager(data_dir=tmp_path)
+
+    snapshot = SessionSnapshot(
+        session_id="flat-seed-session",
+        name="test",
+        created_at=_dt.datetime(2024, 1, 1),
+        updated_at=_dt.datetime(2024, 1, 1),
+        turn_count=0,
+        cwd=str(tmp_path),
+        config={},
+        messages=[
+            {
+                "role": "user",
+                "content": "old message",
+                "tool_call_id": None,
+                "tool_calls": [],
+                "token_count": None,
+            }
+        ],
+        latest_usage=TokenUsage(),
+        total_usage=TokenUsage(),
+        active_tools=[],
+        mcp_servers=[],
+        active_skills=[],
+        todos={},
+    )
+
+    session = Session(
+        config=Config(cwd=tmp_path, model_name="test/test-model"),
+        persistence=persistence,
+    )
+    await session.initialize()
+    session.restore_snapshot(snapshot)
+
+    # Verify entries were seeded
+    entries_after_restore = session.context_manager.get_entries()
+    assert len(entries_after_restore) >= 1, "Expected at least one entry after flat restore"
+
+    # Add a new message and save
+    session.session_id = "flat-seed-session"
+    session.context_manager.add_user_message("new message")
+    session.save_session()
+
+    # Restore again; should have both old and new
+    saved = persistence.load_session("flat-seed-session")
+    assert saved is not None
+
+    session2 = Session(
+        config=Config(cwd=tmp_path, model_name="test/test-model"),
+        persistence=persistence,
+    )
+    await session2.initialize()
+    session2.restore_snapshot(saved)
+
+    msgs = session2.context_manager.get_messages()
+    chat = [m for m in msgs if m["role"] != "system"]
+    contents = [m["content"] for m in chat]
+    assert "new message" in contents, f"New message missing after second restore: {contents}"
+
+
+# ---------------------------------------------------------------------------
+# Test 10: dangling leaf falls back gracefully
+# ---------------------------------------------------------------------------
+
+
+async def test_dangling_leaf_falls_back(tmp_path):
+    """A KIND_LEAF pointing at a missing entry id must not crash Session.restore_snapshot;
+    it should fall back to the flat snapshot messages."""
+    import datetime as _dt
+
+    persistence = PersistenceManager(data_dir=tmp_path)
+
+    session_id = "dangling-leaf-session"
+
+    # Build a valid entry then a dangling leaf pointing to a non-existent id
+    m1 = SessionEntry.message(None, "2024-01-01T00:00:00", "user", "real message", entry_id="m1")
+    dangling_leaf = SessionEntry.leaf(
+        parent_id="m1",
+        timestamp="2024-01-01T00:00:00",
+        entry_id_target="does-not-exist",
+        entry_id="lf1",
+    )
+
+    tree_store = SessionTreeStore(data_dir=tmp_path)
+    tree_store.write_all(session_id, [m1, dangling_leaf])
+
+    snapshot = SessionSnapshot(
+        session_id=session_id,
+        name="test",
+        created_at=_dt.datetime(2024, 1, 1),
+        updated_at=_dt.datetime(2024, 1, 1),
+        turn_count=0,
+        cwd=str(tmp_path),
+        config={},
+        messages=[
+            {
+                "role": "user",
+                "content": "fallback message",
+                "tool_call_id": None,
+                "tool_calls": [],
+                "token_count": None,
+            }
+        ],
+        latest_usage=TokenUsage(),
+        total_usage=TokenUsage(),
+        active_tools=[],
+        mcp_servers=[],
+        active_skills=[],
+        todos={},
+    )
+
+    session = Session(
+        config=Config(cwd=tmp_path, model_name="test/test-model"),
+        persistence=persistence,
+    )
+    await session.initialize()
+
+    # Must not crash
+    session.restore_snapshot(snapshot)
+
+    msgs = session.context_manager.get_messages()
+    chat = [m for m in msgs if m["role"] != "system"]
+    assert len(chat) >= 1, "Expected at least one message after dangling-leaf fallback"

@@ -213,15 +213,15 @@ class TestReconstructMessagesCompaction:
         result = reconstruct_messages([m1, m2, m3, cmp, m4], leaf_id="m4")
 
         # m1 and m2 are replaced; compaction synthetic message is injected
-        # at the compaction's position; m3 and m4 are kept.
+        # at the position of the FIRST replaced message (m1); m3 and m4 are kept.
         roles = [r["role"] for r in result]
         contents = [r["content"] for r in result]
 
-        # Expected order: m3 (user "third"), summary (user), m4 (assistant)
+        # Expected order: summary (injected at m1's position), m3 (user "third"), m4 (assistant)
         assert len(result) == 3
-        assert contents[0] == "third"  # m3 preserved
-        assert contents[1].startswith(COMPACTION_PREFIX)  # summary injected
-        assert "Earlier chat summarized here." in contents[1]
+        assert contents[0].startswith(COMPACTION_PREFIX)  # summary injected at first replaced pos
+        assert "Earlier chat summarized here." in contents[0]
+        assert contents[1] == "third"  # m3 preserved
         assert contents[2] == "after summary"  # m4 preserved
 
     def test_summary_content_starts_with_prefix(self):
@@ -238,7 +238,8 @@ class TestReconstructMessagesCompaction:
         m1, m2, m3, cmp, m4 = self._build_compacted_chain()
         result = reconstruct_messages([m1, m2, m3, cmp, m4], leaf_id="m4")
 
-        m3_msg = result[0]
+        # summary is now at result[0]; m3 is at result[1]
+        m3_msg = result[1]
         assert m3_msg["content"] == "third"
         assert m3_msg["role"] == "user"
 

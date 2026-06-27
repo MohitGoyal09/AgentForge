@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from agentforge_harness.agent.modes import AgentMode
-from agentforge_harness.agent.session_tree import SessionEntry, reconstruct_messages
+from agentforge_harness.agent.session_tree import SessionEntry, active_leaf_id, reconstruct_messages
 from agentforge_harness.client.response import TokenUsage
 from agentforge_harness.config.config import Config
 from agentforge_harness.prompts.system import get_system_prompt
@@ -207,6 +207,26 @@ class ContextManager:
 
         if repaired:
             self._messages = new_messages
+            # Mirror synthetic entries into the durable log when mirroring is active.
+            if self._entries:
+                for msg in new_messages:
+                    if (
+                        msg.role == "tool"
+                        and msg.content == self._INTERRUPTED_TOOL_RESULT
+                        and msg.entry_id is None
+                    ):
+                        entry = SessionEntry.message(
+                            parent_id=self._last_entry_id,
+                            timestamp=datetime.now().isoformat(),
+                            role=msg.role,
+                            content=msg.content,
+                            tool_call_id=msg.tool_call_id,
+                            tool_calls=[],
+                            token_count=msg.token_count,
+                        )
+                        msg.entry_id = entry.id
+                        self._entries.append(entry)
+                        self._last_entry_id = entry.id
 
         return repaired
 
@@ -260,14 +280,17 @@ class ContextManager:
 
     _KEEP_RECENT_TURNS = 5
 
+    @staticmethod
+    def _build_continuation_content(summary: str) -> str:
+        return (
+            "# Context Restoration (Previous Session Compacted)\n\n"
+            "The previous conversation was compacted due to context length limits.\n\n"
+            f"{summary}\n\n"
+            "**CRITICAL: Actions listed above as completed are already done. DO NOT repeat them.**"
+        )
+
     def replace_with_summary(self, summary: str, recent_messages: list[MessageItem] | None = None) -> None:
-        continuation_content = f"""# Context Restoration (Previous Session Compacted)
-
-The previous conversation was compacted due to context length limits.
-
-{summary}
-
-**CRITICAL: Actions listed above as completed are already done. DO NOT repeat them.**"""
+        continuation_content = self._build_continuation_content(summary)
 
         self._messages = [MessageItem(
             role="user",
@@ -291,6 +314,10 @@ The previous conversation was compacted due to context length limits.
         summary, usage = await compactor.compress(self, messages=old_dicts)
 
         if summary:
+            # Build the formatted content now so the entry and the in-memory message
+            # are guaranteed to use the identical string.
+            continuation_content = self._build_continuation_content(summary)
+
             # Record a compaction entry in the append-only log before modifying
             # in-memory messages so we never lose the original message entries.
             if self._entries:
@@ -303,6 +330,7 @@ The previous conversation was compacted due to context length limits.
                     summary=summary,
                     replaces=[m.entry_id for m in old_messages if m.entry_id],
                     summary_tokens=summary_tokens,
+                    continuation_content=continuation_content,
                 )
                 self._entries.append(compaction_entry)
                 self._last_entry_id = compaction_entry.id
@@ -348,6 +376,8 @@ The previous conversation was compacted due to context length limits.
 
     def clear(self) -> None:
         self._messages = []
+        self._entries = []
+        self._last_entry_id = None
 
     def snapshot_messages(self) -> list[dict[str, Any]]:
         return [message.to_snapshot_dict() for message in self._messages]
@@ -373,10 +403,13 @@ The previous conversation was compacted due to context length limits.
         """Replace the in-memory state by reconstructing from an entry list.
 
         Sets self._entries and self._last_entry_id, then rebuilds self._messages
-        from reconstruct_messages(entries).
+        from reconstruct_messages(entries).  Each rebuilt MessageItem has its
+        entry_id set from the reconstructed dict so that a subsequent compaction
+        can reference the correct entry ids.
         """
         self._entries = list(entries)
-        self._last_entry_id = entries[-1].id if entries else None
+        tip = active_leaf_id(entries)
+        self._last_entry_id = tip  # None when entries is empty
 
         reconstructed = reconstruct_messages(entries)
         self._messages = []
@@ -391,6 +424,7 @@ The previous conversation was compacted due to context length limits.
                     tool_call_id=msg_dict.get("tool_call_id"),
                     tool_calls=msg_dict.get("tool_calls") or [],
                     token_count=token_count,
+                    entry_id=msg_dict.get("entry_id"),
                 )
             )
 

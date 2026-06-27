@@ -97,6 +97,7 @@ class SessionEntry:
         replaces: list[str],
         summary_tokens: int | None = None,
         entry_id: str | None = None,
+        continuation_content: str | None = None,
     ) -> SessionEntry:
         return cls(
             id=entry_id if entry_id is not None else uuid4().hex,
@@ -107,6 +108,7 @@ class SessionEntry:
                 "summary": summary,
                 "replaces": list(replaces),
                 "summary_tokens": summary_tokens,
+                "continuation_content": continuation_content,
             },
         )
 
@@ -241,21 +243,21 @@ def active_leaf_id(entries: list[SessionEntry]) -> str | None:
 
     Resolution order:
     1. The ``entry_id`` target of the last KIND_LEAF entry in *entries*.
-    2. The id of the last KIND_MESSAGE entry in *entries*.
-    3. None when *entries* is empty or contains no messages/leaf pointers.
+    2. The id of the last KIND_MESSAGE or KIND_COMPACTION entry in *entries*.
+    3. None when *entries* is empty or contains no messages/compactions/leaf pointers.
     """
     last_leaf_target: str | None = None
-    last_message_id: str | None = None
+    last_message_or_compaction_id: str | None = None
 
     for entry in entries:
         if entry.kind == KIND_LEAF:
             last_leaf_target = entry.payload.get("entry_id")
-        elif entry.kind == KIND_MESSAGE:
-            last_message_id = entry.id
+        elif entry.kind in (KIND_MESSAGE, KIND_COMPACTION):
+            last_message_or_compaction_id = entry.id
 
     if last_leaf_target is not None:
         return last_leaf_target
-    return last_message_id
+    return last_message_or_compaction_id
 
 
 def reconstruct_messages(
@@ -269,7 +271,12 @@ def reconstruct_messages(
 
     Compaction entries cause the ids listed in their ``replaces`` payload field
     to be omitted from the output; in their place a synthetic summary message
-    is injected at the compaction node's position in the path.
+    is injected at the position of the FIRST replaced message in the path.
+    The compaction entry itself emits nothing (its summary was already injected).
+
+    Each returned dict includes an ``entry_id`` key: for a real message entry
+    this is the entry's own id; for an injected summary it is the compaction
+    entry's id.
     """
     if leaf_id is None:
         leaf_id = active_leaf_id(entries)
@@ -279,16 +286,72 @@ def reconstruct_messages(
 
     path = path_to_entry(entries, leaf_id)
 
-    # Collect the set of message ids that have been superseded by a compaction.
+    # Build a map from compaction entry id -> summary message dict, and collect
+    # the set of all replaced message ids across all compactions in the path.
     replaced_ids: set[str] = set()
+    # Map: first_replaced_id -> summary dict to inject there
+    # We process compactions in path order; the first replaced id in the path
+    # (by order of appearance in `path`) determines insertion point.
+    compaction_summaries: dict[str, dict[str, Any]] = {}  # compaction_id -> summary dict
+
     for entry in path:
         if entry.kind == KIND_COMPACTION:
-            replaced_ids.update(entry.payload.get("replaces", []))
+            replaces = entry.payload.get("replaces", [])
+            replaced_ids.update(replaces)
+            summary_text = entry.payload.get("summary", "")
+            # Use the stored formatted content when available (produced by
+            # ContextManager._build_continuation_content); fall back to the
+            # plain prefix so that hand-crafted test entries still work.
+            content = entry.payload.get("continuation_content") or (COMPACTION_PREFIX + summary_text)
+            compaction_summaries[entry.id] = {
+                "role": "user",
+                "content": content,
+                "tool_call_id": None,
+                "tool_calls": [],
+                "token_count": entry.payload.get("summary_tokens"),
+                "entry_id": entry.id,
+            }
+
+    # Now determine insertion point for each compaction: the first message in
+    # `path` whose id is in that compaction's `replaces` list.
+    # We walk path in order; for each compaction, its insertion trigger is
+    # the first path entry whose id is in its `replaces`.
+    # Build: message_id -> list of compaction_ids that want to inject before it.
+    # Compactions that are themselves replaced by a later compaction are suppressed
+    # entirely — their summary is subsumed by the later one.
+    inject_before: dict[str, list[str]] = {}  # message_entry_id -> [compaction_ids to inject]
+
+    for entry in path:
+        if entry.kind == KIND_COMPACTION:
+            # If this compaction is itself replaced by a later compaction, skip it.
+            if entry.id in replaced_ids:
+                continue
+            replaces_set = set(entry.payload.get("replaces", []))
+            # Find first path message that is in replaces
+            for path_entry in path:
+                if path_entry.kind == KIND_MESSAGE and path_entry.id in replaces_set:
+                    inject_before.setdefault(path_entry.id, []).append(entry.id)
+                    break
+            # If no replaced message is in the path (all were already replaced by earlier
+            # compaction), fall back: inject at the compaction's position (handled below
+            # by checking compaction_id_has_no_inject_point)
+
+    # Collect compaction ids that have an injection point
+    compactions_with_inject: set[str] = {
+        cid
+        for cids in inject_before.values()
+        for cid in cids
+    }
 
     result: list[dict[str, Any]] = []
 
     for entry in path:
         if entry.kind == KIND_MESSAGE:
+            # Inject any pending compaction summaries before this message if it's the trigger
+            if entry.id in inject_before:
+                for cid in inject_before[entry.id]:
+                    result.append(compaction_summaries[cid])
+            # Skip this message if it was replaced
             if entry.id in replaced_ids:
                 continue
             p = entry.payload
@@ -299,20 +362,19 @@ def reconstruct_messages(
                     "tool_call_id": p.get("tool_call_id"),
                     "tool_calls": p.get("tool_calls", []),
                     "token_count": p.get("token_count"),
+                    "entry_id": entry.id,
                 }
             )
         elif entry.kind == KIND_COMPACTION:
-            summary = entry.payload.get("summary", "")
-            result.append(
-                {
-                    "role": "user",
-                    "content": COMPACTION_PREFIX + summary,
-                    "tool_call_id": None,
-                    "tool_calls": [],
-                    "token_count": entry.payload.get("summary_tokens"),
-                }
-            )
-        # All other kinds (leaf, model_change, thinking_change, info, custom)
-        # carry no chat messages — skip silently.
+            # A compaction that is itself replaced by a later compaction must not
+            # emit anything — its summary is subsumed.
+            if entry.id in replaced_ids:
+                continue
+            # If this compaction has no injection point (all replaced entries absent
+            # from path), inject summary here as fallback.
+            if entry.id not in compactions_with_inject:
+                result.append(compaction_summaries[entry.id])
+            # Otherwise already injected at the replaced-message position — skip.
+        # All other kinds carry no chat messages — skip silently.
 
     return result
