@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from agentforge_harness.agent.modes import AgentMode
+from agentforge_harness.agent.session_tree import SessionEntry, active_leaf_id, reconstruct_messages
 from agentforge_harness.client.response import TokenUsage
 from agentforge_harness.config.config import Config
 from agentforge_harness.prompts.system import get_system_prompt
@@ -20,7 +21,8 @@ class MessageItem:
     tool_call_id: str | None = None
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     token_count: int | None = None
-    pruned_at : datetime | None = None
+    pruned_at: datetime | None = None
+    entry_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {"role": self.role}
@@ -44,6 +46,7 @@ class MessageItem:
             "tool_calls": self.tool_calls,
             "token_count": self.token_count,
             "pruned_at": self.pruned_at.isoformat() if self.pruned_at else None,
+            "entry_id": self.entry_id,
         }
 
     @classmethod
@@ -56,6 +59,7 @@ class MessageItem:
             tool_calls=data.get("tool_calls", []),
             token_count=data.get("token_count"),
             pruned_at=datetime.fromisoformat(pruned_at) if pruned_at else None,
+            entry_id=data.get("entry_id"),
         )
 
 
@@ -92,6 +96,23 @@ class ContextManager:
         self._messages: list[MessageItem] = []
         self._latest_usage = TokenUsage()
         self._total_usage = TokenUsage()
+        self._entries: list[SessionEntry] = []
+        self._last_entry_id: str | None = None
+
+    def _append_entry_for_message(self, item: MessageItem) -> None:
+        """Build a SessionEntry.message linked to the last entry and record it."""
+        entry = SessionEntry.message(
+            parent_id=self._last_entry_id,
+            timestamp=datetime.now().isoformat(),
+            role=item.role,
+            content=item.content,
+            tool_call_id=item.tool_call_id,
+            tool_calls=item.tool_calls if item.tool_calls else [],
+            token_count=item.token_count,
+        )
+        item.entry_id = entry.id
+        self._entries.append(entry)
+        self._last_entry_id = entry.id
 
     def set_model_name(self, model_name: str) -> None:
         self._model_name = model_name
@@ -105,6 +126,7 @@ class ContextManager:
             token_count=count_tokens(content, self._model_name),
         )
         self._messages.append(item)
+        self._append_entry_for_message(item)
 
     def add_assistant_message(
         self, content: str, tool_calls: list[dict[str, Any]]
@@ -116,6 +138,7 @@ class ContextManager:
             tool_calls=tool_calls or [],
         )
         self._messages.append(item)
+        self._append_entry_for_message(item)
 
     def add_tool_result(self, tool_call_id: str, content: str) -> None:
         item = MessageItem(
@@ -125,6 +148,7 @@ class ContextManager:
             token_count=count_tokens(content, self._model_name),
         )
         self._messages.append(item)
+        self._append_entry_for_message(item)
 
     _INTERRUPTED_TOOL_RESULT = "Tool call interrupted; no result was recorded."
 
@@ -183,6 +207,26 @@ class ContextManager:
 
         if repaired:
             self._messages = new_messages
+            # Mirror synthetic entries into the durable log when mirroring is active.
+            if self._entries:
+                for msg in new_messages:
+                    if (
+                        msg.role == "tool"
+                        and msg.content == self._INTERRUPTED_TOOL_RESULT
+                        and msg.entry_id is None
+                    ):
+                        entry = SessionEntry.message(
+                            parent_id=self._last_entry_id,
+                            timestamp=datetime.now().isoformat(),
+                            role=msg.role,
+                            content=msg.content,
+                            tool_call_id=msg.tool_call_id,
+                            tool_calls=[],
+                            token_count=msg.token_count,
+                        )
+                        msg.entry_id = entry.id
+                        self._entries.append(entry)
+                        self._last_entry_id = entry.id
 
         return repaired
 
@@ -194,7 +238,7 @@ class ContextManager:
         for item in self._messages:
             messages.append(item.to_dict())
         return messages
-    
+
     # Context-budget tiers (percent of the model context window).
     _WARNING_THRESHOLD_PCT = 70
     _COMPACT_THRESHOLD_PCT = 80
@@ -227,23 +271,26 @@ class ContextManager:
         for msg in self._messages:
             total += msg.token_count or count_tokens(msg.content, self._model_name)
         return total
-    
+
     def set_latest_usage(self, usage: TokenUsage):
         self._latest_usage = usage
 
     def add_usage(self, usage: TokenUsage):
         self._total_usage += usage
-    
+
     _KEEP_RECENT_TURNS = 5
 
+    @staticmethod
+    def _build_continuation_content(summary: str) -> str:
+        return (
+            "# Context Restoration (Previous Session Compacted)\n\n"
+            "The previous conversation was compacted due to context length limits.\n\n"
+            f"{summary}\n\n"
+            "**CRITICAL: Actions listed above as completed are already done. DO NOT repeat them.**"
+        )
+
     def replace_with_summary(self, summary: str, recent_messages: list[MessageItem] | None = None) -> None:
-        continuation_content = f"""# Context Restoration (Previous Session Compacted)
-
-The previous conversation was compacted due to context length limits.
-
-{summary}
-
-**CRITICAL: Actions listed above as completed are already done. DO NOT repeat them.**"""
+        continuation_content = self._build_continuation_content(summary)
 
         self._messages = [MessageItem(
             role="user",
@@ -267,25 +314,46 @@ The previous conversation was compacted due to context length limits.
         summary, usage = await compactor.compress(self, messages=old_dicts)
 
         if summary:
+            # Build the formatted content now so the entry and the in-memory message
+            # are guaranteed to use the identical string.
+            continuation_content = self._build_continuation_content(summary)
+
+            # Record a compaction entry in the append-only log before modifying
+            # in-memory messages so we never lose the original message entries.
+            if self._entries:
+                summary_tokens: int | None = None
+                if usage is not None:
+                    summary_tokens = usage.completion_tokens
+                compaction_entry = SessionEntry.compaction(
+                    parent_id=self._last_entry_id,
+                    timestamp=datetime.now().isoformat(),
+                    summary=summary,
+                    replaces=[m.entry_id for m in old_messages if m.entry_id],
+                    summary_tokens=summary_tokens,
+                    continuation_content=continuation_content,
+                )
+                self._entries.append(compaction_entry)
+                self._last_entry_id = compaction_entry.id
+
             self.replace_with_summary(summary, recent_messages=recent_messages)
 
         return summary, usage
-    
+
     def prune_tool_outputs(self) -> int:
         user_message_count = sum(1 for msg in self._messages if msg.role == 'user')
 
-        if user_message_count < 2 :
+        if user_message_count < 2:
             return 0
-        
+
         protected_tokens = 0
         pruned_tokens = 0
-        to_prune : list[MessageItem]= []
+        to_prune: list[MessageItem] = []
         for msg in reversed(self._messages):
             if msg.role == 'tool' and msg.tool_call_id:
                 if msg.pruned_at:
                     continue
 
-                tokens = msg.token_count or count_tokens(msg.content , self._model_name)
+                tokens = msg.token_count or count_tokens(msg.content, self._model_name)
                 if protected_tokens < self._prune_protect_tokens:
                     protected_tokens += tokens
                     continue
@@ -295,19 +363,21 @@ The previous conversation was compacted due to context length limits.
 
         if pruned_tokens < self._prune_minimum_tokens:
             return 0
-        
+
         pruned_count = 0
 
         for msg in to_prune:
-            msg.content ="[Old tool result content cleared]"
-            msg.token_count = count_tokens(msg.content , self._model_name)
+            msg.content = "[Old tool result content cleared]"
+            msg.token_count = count_tokens(msg.content, self._model_name)
             msg.pruned_at = datetime.now()
-            pruned_count +=1
+            pruned_count += 1
 
         return pruned_count
-    
+
     def clear(self) -> None:
         self._messages = []
+        self._entries = []
+        self._last_entry_id = None
 
     def snapshot_messages(self) -> list[dict[str, Any]]:
         return [message.to_snapshot_dict() for message in self._messages]
@@ -324,6 +394,39 @@ The previous conversation was compacted due to context length limits.
     def restore_usage(self, latest_usage: TokenUsage, total_usage: TokenUsage) -> None:
         self._latest_usage = latest_usage
         self._total_usage = total_usage
+
+    def get_entries(self) -> list[SessionEntry]:
+        """Return the append-only entry log as a new list."""
+        return list(self._entries)
+
+    def load_from_entries(self, entries: list[SessionEntry]) -> None:
+        """Replace the in-memory state by reconstructing from an entry list.
+
+        Sets self._entries and self._last_entry_id, then rebuilds self._messages
+        from reconstruct_messages(entries).  Each rebuilt MessageItem has its
+        entry_id set from the reconstructed dict so that a subsequent compaction
+        can reference the correct entry ids.
+        """
+        self._entries = list(entries)
+        tip = active_leaf_id(entries)
+        self._last_entry_id = tip  # None when entries is empty
+
+        reconstructed = reconstruct_messages(entries)
+        self._messages = []
+        for msg_dict in reconstructed:
+            token_count = msg_dict.get("token_count")
+            if token_count is None:
+                token_count = count_tokens(msg_dict.get("content", ""), self._model_name)
+            self._messages.append(
+                MessageItem(
+                    role=msg_dict["role"],
+                    content=msg_dict.get("content", ""),
+                    tool_call_id=msg_dict.get("tool_call_id"),
+                    tool_calls=msg_dict.get("tool_calls") or [],
+                    token_count=token_count,
+                    entry_id=msg_dict.get("entry_id"),
+                )
+            )
 
     def refresh_system_prompt(
         self,
@@ -353,7 +456,3 @@ The previous conversation was compacted due to context length limits.
             active_skill_bodies=self._active_skill_bodies,
             mode=self._mode,
         )
-
-
-
-    

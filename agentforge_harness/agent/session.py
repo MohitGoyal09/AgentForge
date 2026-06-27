@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.agent.subagent_runner import run_subagent
+from agentforge_harness.agent.session_store import SessionTreeStore, migrate_snapshot_to_entries
 from agentforge_harness.client.llm_client import LLMClient
 from agentforge_harness.client.thinking import ThinkingLevel
 from agentforge_harness.config.config import Config, ModelProvider
@@ -42,12 +43,13 @@ class Session:
             redaction_enabled=self.config.redaction_enabled,
         )
         self.skills_manager = SkillManager(self.config.skill_roots)
-        self.active_skills : list[str] = []
+        self.active_skills: list[str] = []
         self.chat_compactor = ChatCompactor(client=self.client)
         self.loop_detector = LoopDetector()
         self.circuit_breaker = CircuitBreakerRegistry()
         self.hook_system = HookSystem(config)
         self.persistence = persistence or PersistenceManager()
+        self.tree_store = SessionTreeStore(data_dir=self.persistence.data_dir)
         self.session_id = str(uuid.uuid4())
         self.name: str = ""
         self.created_at = datetime.now()
@@ -261,7 +263,23 @@ class Session:
             self.mode = AgentMode(snapshot.mode)
         except ValueError:
             self.mode = AgentMode.BUILD
-        self.context_manager.restore_messages(snapshot.messages)
+
+        # Prefer reconstructing from the session tree when one exists.
+        entries = self.tree_store.read_all(snapshot.session_id)
+        if entries:
+            try:
+                self.context_manager.load_from_entries(entries)
+            except (ValueError, KeyError) as exc:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Session tree restore failed (%s); falling back to flat snapshot.", exc
+                )
+                migrated = migrate_snapshot_to_entries(snapshot)
+                self.context_manager.load_from_entries(migrated)
+        else:
+            migrated = migrate_snapshot_to_entries(snapshot)
+            self.context_manager.load_from_entries(migrated)
+
         self.context_manager.restore_usage(snapshot.latest_usage, snapshot.total_usage)
         self.context_manager.refresh_system_prompt(
             tools=self.tool_registry.get_tools(mode=self.mode),
@@ -278,7 +296,12 @@ class Session:
             getattr(todo_tool, "_todos").update(snapshot.todos)
 
     def save_session(self, mode: str | None = None) -> None:
-        self.persistence.save_session(self.create_snapshot(mode=mode))
+        snapshot = self.create_snapshot(mode=mode)
+        self.persistence.save_session(snapshot)
+        if self.context_manager:
+            entries = self.context_manager.get_entries()
+            if entries:
+                self.tree_store.write_all(self.session_id, entries)
 
     def save_checkpoint(self, mode: str | None = None) -> str:
         return self.persistence.save_checkpoint(self.create_snapshot(mode=mode))

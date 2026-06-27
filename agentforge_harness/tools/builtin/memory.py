@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import uuid
 from agentforge_harness.config.config import Config
 from agentforge_harness.config.loader import get_data_dir
@@ -41,7 +43,23 @@ class MemoryTool(Tool):
         data_dir.mkdir(parents=True, exist_ok=True)
         path = data_dir / "user_memory.json"
 
-        path.write_text(json.dumps(memory, indent=2, ensure_ascii=False))
+        fd, tmp_name = tempfile.mkstemp(
+            dir=data_dir,
+            prefix=".user_memory.",
+            suffix=".tmp",
+            text=True,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fp:
+                fp.write(json.dumps(memory, indent=2, ensure_ascii=False))
+                fp.write("\n")
+                fp.flush()
+                os.fsync(fp.fileno())
+            os.replace(tmp_name, path)
+            os.chmod(path, 0o600)
+        finally:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
 
     async def execute(self, invocation: ToolInvocation) -> ToolResult:
         params = MemoryParams(**invocation.params)
