@@ -653,6 +653,8 @@ async def _h_report(argument: str, ctx: CommandContext) -> CommandResult:
         return CommandResult(error="No active session")
     from agentforge_harness.cli.report import build_session_report, format_session_report, report_to_json
     s = ctx.session
+    if s.context_manager is None:
+        return CommandResult(error="Context manager not initialized")
     snapshot = s.create_snapshot(mode=s.mode.value)
     report = build_session_report(snapshot)
     is_json = argument == "--json"
@@ -691,7 +693,10 @@ async def _h_stats(argument: str, ctx: CommandContext) -> CommandResult:
     if not ctx.session:
         return CommandResult(error="No active session")
     from agentforge_harness.tools.builtin.todo import TodosTool
-    usage = ctx.session.context_manager.get_total_usage()
+    cm = ctx.session.context_manager
+    if cm is None:
+        return CommandResult(error="Context manager not initialized")
+    usage = cm.get_total_usage()
     tool = ctx.session.tool_registry.get("todos")
     todo_count = len(tool._todos) if isinstance(tool, TodosTool) else 0
     return CommandResult(
