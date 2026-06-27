@@ -101,17 +101,31 @@ class SubagentTool(Tool):
         error = None
         terminate_response = "goal"
 
-       
+
         event_handler = invocation._event_handler
 
         try:
-            deadline = (
-                asyncio.get_event_loop().time() + self.definition.timeout_seconds
-            )
-            async for event in self._runner(subagent_config, prompt):
-                if asyncio.get_event_loop().time() > deadline:
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + self.definition.timeout_seconds
+            runner_iter = self._runner(subagent_config, prompt).__aiter__()
+            # BUG F fix: wrap each __anext__ call in asyncio.wait_for so a stalled
+            # runner is interrupted by the timeout rather than waiting indefinitely
+            # between events.
+            while True:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
                     terminate_response = "timeout"
                     final_response = "Sub-agent timed out"
+                    break
+                try:
+                    event = await asyncio.wait_for(
+                        runner_iter.__anext__(), timeout=remaining
+                    )
+                except asyncio.TimeoutError:
+                    terminate_response = "timeout"
+                    final_response = "Sub-agent timed out"
+                    break
+                except StopAsyncIteration:
                     break
 
                 if event_handler:

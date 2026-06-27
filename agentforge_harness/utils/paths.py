@@ -21,8 +21,9 @@ def resolve_path(base : str | Path , path : str | Path):
     path = Path(path)
     if path.is_absolute():
         return path.resolve()
-    
-    return Path(base).resolve() / path
+    # BUG C fix: resolve the joined path so traversal sequences like ../etc/passwd
+    # are normalised before any downstream is_relative_to check.
+    return (Path(base).resolve() / path).resolve()
 
 
 def is_binary_file(path : str | Path) -> bool  :

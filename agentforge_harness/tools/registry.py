@@ -147,7 +147,8 @@ class ToolRegistry:
                     )
                     return await self._finish_tool_result(hook_system, name, params, result)
                 elif decision == ApprovalDecision.NEEDS_CONFIRMATION:
-                    approved = approval_manager.request_confirmation(confirmation)
+                    # BUG D fix: request_confirmation is now async; must be awaited.
+                    approved = await approval_manager.request_confirmation(confirmation)
 
                     if not approved:
                         result = ToolResult.error_result("User rejected the operation")

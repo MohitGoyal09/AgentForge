@@ -164,8 +164,10 @@ class ApprovalManager:
 
         # A write that escapes the workspace, or any tool-flagged dangerous
         # action, always needs confirmation.
+        # BUG C fix: compare resolved paths so traversal sequences (e.g. cwd/../other)
+        # are normalised before the containment check.
         escapes_workspace = any(
-            not path.is_relative_to(self.cwd) for path in context.affected_paths
+            not path.resolve().is_relative_to(self.cwd.resolve()) for path in context.affected_paths
         )
         if escapes_workspace or context.is_dangerous:
             return ApprovalDecision.NEEDS_CONFIRMATION
@@ -175,14 +177,16 @@ class ApprovalManager:
         # from policy — never blanket-approve.
         return self._default_mutation_decision(has_paths=bool(context.affected_paths))
     
-    def request_confirmation(self, confirmation: ToolConfirmation):
+    async def request_confirmation(self, confirmation: ToolConfirmation) -> bool:
+        # BUG D fix: the callback is typed Awaitable; must be awaited so an async
+        # callback is actually honoured instead of returning a truthy coroutine.
         display_confirmation = (
             redact_tool_confirmation(confirmation)
             if self.redaction_enabled
             else confirmation
         )
         if self.confirmation_callback:
-            return self.confirmation_callback(display_confirmation)
+            return await self.confirmation_callback(display_confirmation)
         # No callback configured — default to asking via console
         try:
             from rich.console import Console

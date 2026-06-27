@@ -10,12 +10,14 @@ from agentforge_harness.tools.mcp.client import MCPToolInfo
 
 
 class MCPTool(Tool):
+    # BUG G fix: MCP tools must not appear in PLAN mode (which only allows READ/NETWORK).
+    kind: ToolKind = ToolKind.MCP
 
     def __init__(
-        self , 
-        config : Config , 
+        self ,
+        config : Config ,
         client : Client,
-        tool_info : MCPToolInfo , 
+        tool_info : MCPToolInfo ,
         name : str) -> None:
 
         super().__init__(config)
@@ -23,8 +25,8 @@ class MCPTool(Tool):
         self._client = client
         self.name = name
         self.description = self._tool_info.description
-    
-    
+
+
     @property
     def schema(self) -> dict[str, Any]:
         input_schema = self._tool_info.input_schema or {}
@@ -33,7 +35,7 @@ class MCPTool(Tool):
             'properties' : input_schema.get('properties' , {}),
             'required' : input_schema.get('required' , []),
         }
-        
+
 
     def is_mutating(self, params) -> bool:
         return True
@@ -44,8 +46,22 @@ class MCPTool(Tool):
                 self._tool_info.name,
                 invocation.params,
             )
-            output = result.get('output' , '')
-            is_error = result.get('is_error' , False)
+            # BUG B fix: fastmcp returns a CallToolResult dataclass, not a dict.
+            # Extract text content from content blocks robustly.
+            content_blocks = getattr(result, 'content', None) or []
+            text_parts = [
+                getattr(block, 'text', '')
+                for block in content_blocks
+                if hasattr(block, 'text')
+            ]
+            if text_parts:
+                output = ''.join(text_parts)
+            else:
+                # Fall back to data or structured_content attributes
+                data = getattr(result, 'data', None)
+                structured = getattr(result, 'structured_content', None)
+                output = str(data) if data is not None else str(structured) if structured is not None else ''
+            is_error = bool(getattr(result, 'is_error', False))
 
             if is_error:
                 return ToolResult.error_result(output)

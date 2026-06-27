@@ -55,10 +55,10 @@ def test_redact_tool_confirmation_redacts_command_description_params_and_diff(tm
     assert "redacted" in redacted.description
 
 
-def test_approval_manager_sends_redacted_confirmation_to_callback(tmp_path: Path):
+async def test_approval_manager_sends_redacted_confirmation_to_callback(tmp_path: Path):
     seen: list[ToolConfirmation] = []
 
-    def callback(confirmation: ToolConfirmation) -> bool:
+    async def callback(confirmation: ToolConfirmation) -> bool:
         seen.append(confirmation)
         return True
 
@@ -76,7 +76,7 @@ def test_approval_manager_sends_redacted_confirmation_to_callback(tmp_path: Path
         is_dangerous=True,
     )
 
-    assert manager.request_confirmation(confirmation) is True
+    assert await manager.request_confirmation(confirmation) is True
 
     assert seen
     rendered = json.dumps(seen[0].params) + seen[0].description + (seen[0].command or "")
