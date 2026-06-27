@@ -62,6 +62,20 @@ def test_openai_reasoning_effort_medium_returns_medium():
     assert openai_reasoning_effort(ThinkingLevel.MEDIUM) == "medium"
 
 
+def test_session_set_thinking_level_updates_config(tmp_path):
+    # Regression: the /thinking <level> command calls session.set_thinking_level,
+    # which was accidentally dropped in a refactor and crashed at runtime.
+    from agentforge_harness.agent.agent import Agent
+
+    agent = Agent(Config(cwd=tmp_path, model=ModelConfig(name="test/model")))
+    assert agent.session.thinking_level == ThinkingLevel.OFF
+
+    agent.session.set_thinking_level(ThinkingLevel.LOW)
+
+    assert agent.session.thinking_level == ThinkingLevel.LOW
+    assert agent.config.model.thinking == ThinkingLevel.LOW
+
+
 def test_is_enabled_off_is_false():
     assert is_enabled(ThinkingLevel.OFF) is False
 
