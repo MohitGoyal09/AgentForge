@@ -142,13 +142,18 @@ class TranscriptView(VerticalScroll):
 class SessionSidebar(Static):
     """Sidebar panel showing current session metadata."""
 
+    _SIDEBAR_W = 28  # inner content width for separators
+
     DEFAULT_CSS = """SessionSidebar {
-    width: 26;
+    width: 30;
     padding: 1 1;
     border-right: solid #1a1a1a;
     background: #050505;
     color: #aaaaaa;
 }"""
+
+    def _sep(self) -> str:
+        return f"[#222233]{'─' * self._SIDEBAR_W}[/#222233]"
 
     def update_from_info(
         self,
@@ -161,36 +166,48 @@ class SessionSidebar(Static):
         theme: TuiTheme = DEFAULT_THEME,
         tools: list[str] | None = None,
         skills: list[str] | None = None,
+        skill_total: int = 0,
     ) -> None:
         amber = "#d4a04a"
         dim = "#555566"
         text = "#aaaaaa"
+        sep = self._sep()
 
-        safe_model = str(model).replace("[", "\\[").replace("]", "\\]")
+        # Truncate model to fit without wrapping (sidebar inner width = 28)
+        raw_model = str(model)
+        if len(raw_model) > self._SIDEBAR_W:
+            raw_model = raw_model[: self._SIDEBAR_W - 1] + "…"
+        safe_model = raw_model.replace("[", "\\[").replace("]", "\\]")
         safe_mode = str(mode).replace("[", "\\[").replace("]", "\\]")
 
         lines = [
-            f"[bold {amber}]AgentForge[/bold {amber}]",
+            # Logo
+            f"[bold white]AgentForge[/bold white]",
             "",
+            # Session section
             f"[bold {amber}]session[/bold {amber}]",
-            f"[{dim}]mode    [/{dim}] [{text}]{safe_mode}[/{text}]",
-            f"[{dim}]model   [/{dim}] [{text}]{safe_model}[/{text}]",
-            f"[{dim}]turn    [/{dim}] [{text}]{turn}[/{text}]",
-            f"[{dim}]in      [/{dim}] [{text}]{prompt_tokens:,}[/{text}]",
-            f"[{dim}]out     [/{dim}] [{text}]{completion_tokens:,}[/{text}]",
+            f"[{dim}]mode    [/{dim}][{text}]{safe_mode}[/{text}]",
+            f"[{dim}]model[/{dim}]",
+            f"[{text}]{safe_model}[/{text}]",
+            f"[{dim}]turn    [/{dim}][{text}]{turn}[/{text}]",
+            f"[{dim}]in      [/{dim}][{text}]{prompt_tokens:,}[/{text}]",
+            f"[{dim}]out     [/{dim}][{text}]{completion_tokens:,}[/{text}]",
+            sep,
         ]
 
         if tools:
-            lines += ["", f"[bold {amber}]tools[/bold {amber}]"]
-            for t in tools[:10]:
+            lines.append(f"[bold {amber}]tools[/bold {amber}]")
+            for t in tools:
                 safe_t = str(t).replace("[", "\\[")
-                lines.append(f"[{dim}]•[/{dim}] [{text}]{safe_t}[/{text}]")
+                lines.append(f"[{dim}]• [/{dim}][{text}]{safe_t}[/{text}]")
+            lines.append(sep)
 
-        if skills:
-            lines += ["", f"[bold {amber}]skills[/bold {amber}]"]
-            for s in skills[:20]:
+        if skills is not None:
+            total = skill_total or len(skills)
+            lines.append(f"[bold {amber}]skills[/bold {amber}]  [{dim}]{total}[/{dim}]")
+            for s in skills[:40]:
                 safe_s = str(s).replace("[", "\\[")
-                lines.append(f"[{dim}]•[/{dim}] [{text}]{safe_s}[/{text}]")
+                lines.append(f"[{dim}]• [/{dim}][{text}]{safe_s}[/{text}]")
 
         self.update("\n".join(lines))
 
@@ -223,7 +240,12 @@ class StatusBar(Static):
     ) -> None:
         amber = "#d4a04a"
         dim = "#555566"
-        left = f"[{dim}]{cwd}[/{dim}] [{amber}]({branch})[/{amber}]"
-        ctx = f"{prompt_tokens // 1000}k/{max_tokens // 1000}k context"
-        right = f"[{dim}]{ctx}  {model} ({mode})[/{dim}]"
-        self.update(f"{left}  {right}")
+        # Keep model short: strip provider prefix if any (e.g. "nvidia/…" → "…")
+        short_model = model.split("/")[-1] if "/" in model else model
+        if len(short_model) > 22:
+            short_model = short_model[:21] + "…"
+        ptk = prompt_tokens // 1000
+        mtk = max_tokens // 1000
+        left = f"[{dim}]{cwd} [/{dim}][{amber}]({branch})[/{amber}]"
+        right = f"[{dim}]{ptk}k/{mtk}k context   {short_model} ({mode})[/{dim}]"
+        self.update(f"{left}   {right}")

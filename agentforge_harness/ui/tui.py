@@ -302,37 +302,36 @@ Footer {
         turn = getattr(session, "_turn_count", 0) if session else 0
         prompt_tokens = 0
         completion_tokens = 0
-        max_tokens = 256_000
+        max_tokens = 200_000
 
         if session and session.context_manager is not None:
             try:
                 usage = session.context_manager.get_total_usage()
                 prompt_tokens = usage.prompt_tokens or 0
                 completion_tokens = usage.completion_tokens or 0
+                budget = session.context_manager.get_context_budget()
+                max_tokens = budget.get("total_tokens", max_tokens)
             except Exception:
                 pass
 
-        # Get tool names
+        # Tools — session.tool_names is a property returning list[str]
         tools: list[str] = []
         if session:
             try:
-                if hasattr(session, "tool_registry") and session.tool_registry:
-                    tools = list(session.tool_registry.keys())[:10]
-                elif hasattr(session, "_tools") and session._tools:
-                    tools = [getattr(t, "name", str(t)) for t in session._tools][:10]
+                tools = list(session.tool_names)
             except Exception:
                 pass
 
-        # Get active skill names
+        # Skills — all known from skills_manager, active subset first
         skills: list[str] = []
+        skill_total = 0
         if session:
             try:
-                if hasattr(session, "skills_manager") and session.skills_manager:
-                    sm = session.skills_manager
-                    if hasattr(sm, "active_skills"):
-                        skills = list(sm.active_skills)[:20]
-                    elif hasattr(sm, "_active"):
-                        skills = list(sm._active)[:20]
+                all_meta = session.skills_manager.list_skills()
+                skill_total = len(all_meta)
+                active = list(session.active_skill_names)
+                known = [s.name for s in all_meta if s.name not in active]
+                skills = active + known
             except Exception:
                 pass
 
@@ -342,12 +341,12 @@ Footer {
             turn=turn,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
-            theme=self._theme,
             tools=tools or None,
             skills=skills or None,
+            skill_total=skill_total,
         )
 
-        # Update status bar
+        # Status bar
         try:
             import os
             import subprocess
@@ -359,7 +358,7 @@ Footer {
                     capture_output=True,
                     text=True,
                     timeout=1,
-                ).stdout.strip()
+                ).stdout.strip() or "main"
             except Exception:
                 branch = "main"
             statusbar = self.query_one("#statusbar", StatusBar)
