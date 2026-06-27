@@ -143,14 +143,17 @@ def run(prompt: str | None, cwd: Path | None, plain: bool = False) -> None:
             console.print(f"[error]Configuration Error : {error}[/error]")
         sys.exit(1)
 
-    cli_obj = CLI(config)
-
-    if prompt:
-        result = asyncio.run(cli_obj.run_single(prompt))
-        if result is None:
-            sys.exit(1)
+    if plain or prompt:
+        cli_obj = CLI(config)
+        if prompt:
+            result = asyncio.run(cli_obj.run_single(prompt))
+            if result is None:
+                sys.exit(1)
+        else:
+            asyncio.run(cli_obj.run_interactive())
     else:
-        asyncio.run(cli_obj.run_interactive())
+        from agentforge_harness.ui.tui import run_tui
+        asyncio.run(run_tui(config=config))
 
 
 @cli.command()
