@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Footer, Header, Input, Static
+from textual.widgets import Footer, Input, Static
 
 from agentforge_harness.ui.adapter import TuiEventAdapter
 from agentforge_harness.ui.autocomplete import build_completion_state
 from agentforge_harness.ui.config import DEFAULT_THEME, TuiTheme
 from agentforge_harness.ui.state import TuiState
-from agentforge_harness.ui.widgets import SessionSidebar, TranscriptView
+from agentforge_harness.ui.widgets import SessionSidebar, StatusBar, TranscriptView
 
 if TYPE_CHECKING:
     from agentforge_harness.config.config import Config
@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
 class AgentForgeTuiApp(App):
     """Full Textual TUI for AgentForge."""
+
+    TITLE = "AgentForge"
+    SUB_TITLE = ""
 
     BINDINGS = [
         Binding("ctrl+d", "quit", "Quit"),
@@ -29,23 +32,59 @@ class AgentForgeTuiApp(App):
     ]
 
     CSS = """
-    Screen {
-        background: #1a1a2e;
-        color: #e0e0e0;
-    }
-    #prompt-prefix {
-        width: 3;
-        padding: 1 0 0 1;
-    }
-    #autocomplete {
-        height: auto;
-        padding: 0 1;
-        color: #555577;
-    }
-    #prompt {
-        width: 1fr;
-    }
-    """
+Screen {
+    background: #0d0d0d;
+    color: #cccccc;
+    layers: base overlay;
+}
+#layout {
+    height: 1fr;
+}
+#main {
+    height: 1fr;
+}
+#transcript {
+    height: 1fr;
+    padding: 0 1;
+    background: #0d0d0d;
+}
+#input-row {
+    height: auto;
+    border-top: solid #1a1a1a;
+    padding: 0;
+    background: #0d0d0d;
+}
+#prompt-prefix {
+    width: 3;
+    padding: 0 0 0 1;
+    content-align: center middle;
+    color: #d4a04a;
+}
+#prompt {
+    width: 1fr;
+    border: none;
+    background: transparent;
+    color: #cccccc;
+    padding: 0 1;
+}
+Input:focus {
+    border: none;
+    background: transparent;
+}
+#autocomplete {
+    height: auto;
+    padding: 0 4;
+    color: #333344;
+    background: #0d0d0d;
+}
+TranscriptMessageWidget {
+    padding: 0 0 1 0;
+}
+Footer {
+    background: #050505;
+    color: #555566;
+}
+"""
 
     def __init__(self, config: Config, theme: TuiTheme = DEFAULT_THEME, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -60,18 +99,18 @@ class AgentForgeTuiApp(App):
     def compose(self) -> ComposeResult:
         from textual.containers import Horizontal, Vertical
 
-        yield Header()
-        yield Horizontal(
-            SessionSidebar(id="sidebar"),
-            Vertical(
-                TranscriptView(self.state, theme=self._theme, id="transcript"),
-                Horizontal(
-                    Static("❯", id="prompt-prefix"),
-                    Input(id="prompt"),
-                ),
-                Static("", id="autocomplete"),
-            ),
-        )
+        with Horizontal(id="layout"):
+            yield SessionSidebar(id="sidebar")
+            with Vertical(id="main"):
+                yield TranscriptView(self.state, theme=self._theme, id="transcript")
+                yield Static("", id="autocomplete")
+                with Horizontal(id="input-row"):
+                    yield Static("❯", id="prompt-prefix")
+                    yield Input(
+                        placeholder="Ask AgentForge… Enter submits, Alt+Enter steers",
+                        id="prompt",
+                    )
+        yield StatusBar(id="statusbar")
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -258,17 +297,42 @@ class AgentForgeTuiApp(App):
             return
 
         session = self._agent.session if self._agent else None
-        mode = session.mode.value if session else "build"
+        mode = session.mode.value if session and session.mode else "build"
         model = self._config.model_name
-        turn = session._turn_count if session else 0
+        turn = getattr(session, "_turn_count", 0) if session else 0
         prompt_tokens = 0
         completion_tokens = 0
+        max_tokens = 256_000
 
         if session and session.context_manager is not None:
             try:
                 usage = session.context_manager.get_total_usage()
                 prompt_tokens = usage.prompt_tokens or 0
                 completion_tokens = usage.completion_tokens or 0
+            except Exception:
+                pass
+
+        # Get tool names
+        tools: list[str] = []
+        if session:
+            try:
+                if hasattr(session, "tool_registry") and session.tool_registry:
+                    tools = list(session.tool_registry.keys())[:10]
+                elif hasattr(session, "_tools") and session._tools:
+                    tools = [getattr(t, "name", str(t)) for t in session._tools][:10]
+            except Exception:
+                pass
+
+        # Get active skill names
+        skills: list[str] = []
+        if session:
+            try:
+                if hasattr(session, "skills_manager") and session.skills_manager:
+                    sm = session.skills_manager
+                    if hasattr(sm, "active_skills"):
+                        skills = list(sm.active_skills)[:20]
+                    elif hasattr(sm, "_active"):
+                        skills = list(sm._active)[:20]
             except Exception:
                 pass
 
@@ -279,7 +343,36 @@ class AgentForgeTuiApp(App):
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             theme=self._theme,
+            tools=tools or None,
+            skills=skills or None,
         )
+
+        # Update status bar
+        try:
+            import os
+            import subprocess
+
+            cwd = os.path.basename(os.getcwd())
+            try:
+                branch = subprocess.check_output(
+                    ["git", "branch", "--show-current"],
+                    capture_output=True,
+                    text=True,
+                    timeout=1,
+                ).stdout.strip()
+            except Exception:
+                branch = "main"
+            statusbar = self.query_one("#statusbar", StatusBar)
+            statusbar.update_status(
+                cwd=f"~/{cwd}",
+                branch=branch,
+                prompt_tokens=prompt_tokens,
+                max_tokens=max_tokens,
+                model=model,
+                mode=mode,
+            )
+        except Exception:
+            pass
 
     def _refresh_transcript(self) -> None:
         try:

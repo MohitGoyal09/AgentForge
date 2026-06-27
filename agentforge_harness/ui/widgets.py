@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
+from textual.containers import VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Static
 
@@ -86,10 +87,8 @@ class TranscriptMessageWidget(Static):
 # ---------------------------------------------------------------------------
 
 
-class TranscriptView(Widget):
+class TranscriptView(VerticalScroll):
     """Scrollable view of all chat transcript items."""
-
-    DEFAULT_CSS = "TranscriptView { height: 1fr; overflow-y: scroll; padding: 0 1; }"
 
     def __init__(
         self,
@@ -111,7 +110,7 @@ class TranscriptView(Widget):
             )
 
     def refresh_from_state(self) -> None:
-        self.remove_children()
+        self.query("TranscriptMessageWidget").remove()
         for item in self._state.items:
             self.mount(
                 TranscriptMessageWidget(
@@ -143,7 +142,13 @@ class TranscriptView(Widget):
 class SessionSidebar(Static):
     """Sidebar panel showing current session metadata."""
 
-    DEFAULT_CSS = "SessionSidebar { width: 28; padding: 1; border-right: solid #333355; }"
+    DEFAULT_CSS = """SessionSidebar {
+    width: 26;
+    padding: 1 1;
+    border-right: solid #1a1a1a;
+    background: #050505;
+    color: #aaaaaa;
+}"""
 
     def update_from_info(
         self,
@@ -154,19 +159,71 @@ class SessionSidebar(Static):
         prompt_tokens: int,
         completion_tokens: int,
         theme: TuiTheme = DEFAULT_THEME,
+        tools: list[str] | None = None,
+        skills: list[str] | None = None,
     ) -> None:
-        accent = theme.accent
-        dim = "#555577"
+        amber = "#d4a04a"
+        dim = "#555566"
+        text = "#aaaaaa"
+
+        safe_model = str(model).replace("[", "\\[").replace("]", "\\]")
         safe_mode = str(mode).replace("[", "\\[").replace("]", "\\]")
-        safe_model = str(model)[:20].replace("[", "\\[").replace("]", "\\]")
+
         lines = [
-            f"[{accent}]AgentForge[/{accent}]",
+            f"[bold {amber}]AgentForge[/bold {amber}]",
             "",
-            f"[{dim}]Mode      [/{dim}] {safe_mode}",
-            f"[{dim}]Model     [/{dim}] {safe_model}",
-            f"[{dim}]Turn      [/{dim}] {turn}",
-            "",
-            f"[{dim}]Prompt    [/{dim}] {prompt_tokens:,}",
-            f"[{dim}]Completion[/{dim}] {completion_tokens:,}",
+            f"[bold {amber}]session[/bold {amber}]",
+            f"[{dim}]mode    [/{dim}] [{text}]{safe_mode}[/{text}]",
+            f"[{dim}]model   [/{dim}] [{text}]{safe_model}[/{text}]",
+            f"[{dim}]turn    [/{dim}] [{text}]{turn}[/{text}]",
+            f"[{dim}]in      [/{dim}] [{text}]{prompt_tokens:,}[/{text}]",
+            f"[{dim}]out     [/{dim}] [{text}]{completion_tokens:,}[/{text}]",
         ]
+
+        if tools:
+            lines += ["", f"[bold {amber}]tools[/bold {amber}]"]
+            for t in tools[:10]:
+                safe_t = str(t).replace("[", "\\[")
+                lines.append(f"[{dim}]•[/{dim}] [{text}]{safe_t}[/{text}]")
+
+        if skills:
+            lines += ["", f"[bold {amber}]skills[/bold {amber}]"]
+            for s in skills[:20]:
+                safe_s = str(s).replace("[", "\\[")
+                lines.append(f"[{dim}]•[/{dim}] [{text}]{safe_s}[/{text}]")
+
         self.update("\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# StatusBar
+# ---------------------------------------------------------------------------
+
+
+class StatusBar(Static):
+    """Single-line status bar at the bottom showing cwd + context info."""
+
+    DEFAULT_CSS = """StatusBar {
+    height: 1;
+    background: #050505;
+    border-top: solid #1a1a1a;
+    padding: 0 1;
+    color: #555566;
+}"""
+
+    def update_status(
+        self,
+        *,
+        cwd: str,
+        branch: str,
+        prompt_tokens: int,
+        max_tokens: int,
+        model: str,
+        mode: str,
+    ) -> None:
+        amber = "#d4a04a"
+        dim = "#555566"
+        left = f"[{dim}]{cwd}[/{dim}] [{amber}]({branch})[/{amber}]"
+        ctx = f"{prompt_tokens // 1000}k/{max_tokens // 1000}k context"
+        right = f"[{dim}]{ctx}  {model} ({mode})[/{dim}]"
+        self.update(f"{left}  {right}")
