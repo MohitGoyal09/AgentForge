@@ -302,6 +302,35 @@ class Session:
             getattr(todo_tool, "_todos").update(snapshot.todos)
 
     # ------------------------------------------------------------------
+    # Command dispatch (P2.3b)
+    # ------------------------------------------------------------------
+
+    async def handle_command(self, text: str) -> "CommandResult":
+        """Dispatch a slash-command through the shared CommandRegistry.
+
+        Returns a CommandResult describing what happened.  The caller is
+        responsible for rendering (notices, errors, mode switches, etc.).
+        """
+        from agentforge_harness.cli.command_registry import CommandContext, get_registry
+        from agentforge_harness.cli.command_result import CommandResult
+
+        text = text.strip()
+        if not text.startswith("/"):
+            return CommandResult(handled=False, error=f"Not a command: {text!r}")
+
+        parts = text.split(maxsplit=1)
+        name = parts[0].lower()
+        argument = parts[1].strip() if len(parts) > 1 else ""
+
+        ctx = CommandContext(
+            session=self,
+            config=self.config,
+            agent=None,
+            last_user_message="",
+        )
+        return await get_registry().dispatch(name, argument, ctx)
+
+    # ------------------------------------------------------------------
     # Branching API (P2.1 layer 4)
     # ------------------------------------------------------------------
 
