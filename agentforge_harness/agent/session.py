@@ -5,6 +5,7 @@ from typing import Any
 from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.agent.subagent_runner import run_subagent
 from agentforge_harness.client.llm_client import LLMClient
+from agentforge_harness.client.thinking import ThinkingLevel
 from agentforge_harness.config.config import Config, ModelProvider
 from agentforge_harness.config.loader import get_data_dir
 from agentforge_harness.context.compaction import ChatCompactor
@@ -87,6 +88,9 @@ class Session:
         todo_tool = self.tool_registry.get("todos")
         if todo_tool and hasattr(todo_tool, "_todos"):
             getattr(todo_tool, "_todos").clear()
+
+    def set_thinking_level(self, level: ThinkingLevel) -> None:
+        self.config.model.thinking = level
 
     def set_mode(self, mode: AgentMode) -> None:
         if self.mode == mode:

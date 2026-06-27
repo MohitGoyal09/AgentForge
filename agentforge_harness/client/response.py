@@ -16,6 +16,7 @@ class TextDelta:
 
 class StreamEventType(str , Enum):
     TEXT_DELTA = "text_delta"
+    THINKING_DELTA = "thinking_delta"
     MESSAGE_COMPLETE = "message_complete"
     ERROR = "error"
 

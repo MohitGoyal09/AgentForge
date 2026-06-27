@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
+from agentforge_harness.client.thinking import ThinkingLevel
+
 class ShellEnvironmentPolicy(BaseModel):
     ignore_default_excludes: bool = False
     exclude_patterns: list[str] = Field(
@@ -52,6 +54,7 @@ class ModelConfig(BaseModel):
     max_output_tokens: int = Field(default=4096, ge=1)
     base_url: str | None = None
     fallbacks: list[str] = Field(default_factory=list, description="Fallback models tried in order when primary is circuit-broken or fails")
+    thinking: ThinkingLevel = Field(default=ThinkingLevel.OFF, description="Reasoning/extended-thinking effort level")
     
 
 class SubagentConfig(BaseModel):
@@ -184,6 +187,14 @@ class Config(BaseModel):
     @temperature.setter
     def temperature(self, value: float) -> None:
         self.model.temperature = value
+
+    @property
+    def thinking_level(self) -> ThinkingLevel:
+        return self.model.thinking
+
+    @thinking_level.setter
+    def thinking_level(self, value: ThinkingLevel) -> None:
+        self.model.thinking = value
 
     def validate(self) -> list[str]:
         errors: list[str] = []

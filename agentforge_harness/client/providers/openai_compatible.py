@@ -6,6 +6,7 @@ from openai import APIConnectionError, AsyncOpenAI, APIError, RateLimitError
 
 from agentforge_harness.config.config import Config
 from agentforge_harness.client.providers.base import BaseProvider
+from agentforge_harness.client.thinking import openai_reasoning_effort
 from agentforge_harness.client.response import (
     StreamEvent,
     StreamEventType,
@@ -87,6 +88,10 @@ class OpenAICompatibleProvider(BaseProvider):
         if tools:
             kwargs["tools"] = self._build_tools(tools)
             kwargs["tool_choice"] = "auto"
+
+        effort = openai_reasoning_effort(self.config.thinking_level)
+        if effort is not None:
+            kwargs["reasoning_effort"] = effort
 
         if stream:
             async for event in self._stream_response(client, kwargs):
