@@ -23,4 +23,5 @@ __pycache__
 !.crew/artifacts/
 !.crew/graphs/
 !.crew/artifacts/.gitkeep
-!.crew/graphs/.gitkeep
+!.crew/graphs/.gitkeep.superpowers/
+.superpowers/
