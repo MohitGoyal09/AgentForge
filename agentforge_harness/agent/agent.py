@@ -42,6 +42,10 @@ class Agent:
     async def run(self, message: str):
         run_id = str(uuid.uuid4())
         self.session._running = True
+        self.session.persistence.append_run_diagnostic(
+            self.session.session_id,
+            {"run_id": run_id, "session_id": self.session.session_id, "message_preview": message[:120]},
+        )
         try:
             await self.session.hook_system.trigger_before_agent(message)
             start_event = AgentEvent.agents_start(message, run_id=run_id)
@@ -62,6 +66,10 @@ class Agent:
             end_event = AgentEvent.agents_end(final_response, run_id=run_id)
             self._record(end_event)
             yield end_event
+            self.session.persistence.append_run_diagnostic(
+                self.session.session_id,
+                {"run_id": run_id, "event": "end"},
+            )
         finally:
             self.session._running = False
             # Clear any cancellation so a stale flag from this run does not

@@ -291,7 +291,7 @@ class SkillManager:
             return None
 
         parsed = self._parse_tool_list(raw_value)
-        return parsed or None
+        return parsed  # preserve explicit empty list; None already returned above when raw_value is absent
 
     def _parse_tool_list(self, value: str) -> list[str]:
         text = value.strip()

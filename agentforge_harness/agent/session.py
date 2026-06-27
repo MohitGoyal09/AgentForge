@@ -1,8 +1,11 @@
 from datetime import datetime
 import json
+import logging
 import uuid
 from pathlib import Path
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.agent.subagent_runner import run_subagent
 from agentforge_harness.agent.session_store import SessionTreeStore, migrate_snapshot_to_entries
@@ -51,6 +54,7 @@ class Session:
         )
         self.skills_manager = SkillManager(self.config.skill_roots)
         self.active_skills: list[str] = []
+        self._active_allowed_tools: list[str] | None = None
         self.chat_compactor = ChatCompactor(client=self.client)
         self.loop_detector = LoopDetector()
         self.circuit_breaker = CircuitBreakerRegistry()
@@ -450,6 +454,7 @@ class Session:
             self.active_skills.append(name)
         body = self.skills_manager.load_skill(name)
         self._refresh_skill_prompt()
+        self._sync_active_allowed_tools()
         return body
 
     def deactivate_skill(self, name: str) -> bool:
@@ -457,8 +462,16 @@ class Session:
             self.active_skills.remove(name)
             self.skills_manager.unload_skill(name)
             self._refresh_skill_prompt()
+            self._sync_active_allowed_tools()
             return True
         return False
+
+    def _sync_active_allowed_tools(self) -> None:
+        """Recompute and cache the effective allowed-tools set for active skills."""
+        self._active_allowed_tools = self.skills_manager.get_active_allowed_tools(
+            list(self.active_skills)
+        )
+        _logger.debug("Active allowed tools: %s", self._active_allowed_tools)
 
     def _refresh_skill_prompt(self) -> None:
         if not self.context_manager:

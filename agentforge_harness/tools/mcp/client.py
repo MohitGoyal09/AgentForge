@@ -89,9 +89,16 @@ class MCPClient:
         Returns True if a connection was established, False otherwise.
         Does NOT raise on failure.
         """
+        self._tools.clear()
+        if self._client:
+            try:
+                await self._client.__aexit__(None, None, None)
+            except Exception:
+                pass
+            self._client = None
         self.status = MCPServerStatus.DISCONNECTED
         for attempt in range(max_attempts):
-            logger.warning(
+            logger.info(
                 "MCP server %r reconnect attempt %d/%d",
                 self.name,
                 attempt + 1,

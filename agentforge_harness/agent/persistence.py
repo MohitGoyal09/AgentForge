@@ -196,6 +196,13 @@ class PersistenceManager:
         with open(file_path, "r", encoding="utf-8") as fp:
             data = json.load(fp)
 
+        file_version = data.get("schema_version", 0)
+        if file_version > SCHEMA_VERSION:
+            raise ValueError(
+                f"Checkpoint uses schema version {file_version} "
+                f"but this build only supports up to {SCHEMA_VERSION}."
+            )
+
         return SessionSnapshot.from_dict(data)
 
     def list_checkpoints(self) -> list[dict[str, Any]]:

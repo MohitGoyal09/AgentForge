@@ -14,9 +14,13 @@ from agentforge_harness.context.manager import ContextManager
 class _CapturingPersistence:
     def __init__(self) -> None:
         self.events: list[tuple[str, dict]] = []
+        self.run_diagnostics: list[dict] = []
 
     def append_event(self, session_id, turn, sequence, event_type, payload):
         self.events.append((event_type, payload))
+
+    def append_run_diagnostic(self, session_id, record):
+        self.run_diagnostics.append(record)
 
 
 class _SimpleClient:
