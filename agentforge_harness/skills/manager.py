@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ast
+import logging
 from pathlib import Path
 import re
+
+_MAX_SKILL_BODY_CHARS = 32_000
+_logger = logging.getLogger(__name__)
 
 
 _FRONTMATTER_DELIMITER = "---"
@@ -90,6 +94,20 @@ class SkillManager:
         metadata = self.get_skill(name)
         body = metadata.path.read_text(encoding="utf-8")
         body = self._strip_frontmatter(body)
+
+        original_len = len(body)
+        if original_len > _MAX_SKILL_BODY_CHARS:
+            body = (
+                body[:_MAX_SKILL_BODY_CHARS]
+                + "\n\n[... skill content truncated for compaction; use Read on the skill path if you need the full text]"
+            )
+            _logger.warning(
+                "Skill %s truncated from %d to %d chars",
+                name,
+                original_len,
+                _MAX_SKILL_BODY_CHARS,
+            )
+
         self._loaded[name] = body
         return body
 
