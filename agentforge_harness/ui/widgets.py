@@ -157,11 +157,13 @@ class SessionSidebar(Static):
     ) -> None:
         accent = theme.accent
         dim = "#555577"
+        safe_mode = str(mode).replace("[", "\\[").replace("]", "\\]")
+        safe_model = str(model)[:20].replace("[", "\\[").replace("]", "\\]")
         lines = [
             f"[{accent}]AgentForge[/{accent}]",
             "",
-            f"[{dim}]Mode      [/{dim}] {mode}",
-            f"[{dim}]Model     [/{dim}] {model[:20]}",
+            f"[{dim}]Mode      [/{dim}] {safe_mode}",
+            f"[{dim}]Model     [/{dim}] {safe_model}",
             f"[{dim}]Turn      [/{dim}] {turn}",
             "",
             f"[{dim}]Prompt    [/{dim}] {prompt_tokens:,}",

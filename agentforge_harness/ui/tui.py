@@ -186,6 +186,10 @@ class AgentForgeTuiApp(App):
             self._refresh_transcript()
 
     async def _run_prompt(self, message: str) -> None:
+        if self._run_task and not self._run_task.done():
+            # Previous run still active — queue as steer instead
+            self._queue_message(message, mode="steer")
+            return
         if self._agent is None:
             return
         self.state.add_user_message(message)
@@ -206,6 +210,7 @@ class AgentForgeTuiApp(App):
                 self._refresh_transcript()
             finally:
                 self._update_sidebar()
+                self._run_task = None
 
         self._run_task = asyncio.create_task(_stream())
 
