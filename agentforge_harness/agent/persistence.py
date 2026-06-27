@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -9,6 +10,8 @@ import tempfile
 from typing import Any
 from agentforge_harness.client.response import TokenUsage
 from agentforge_harness.config.loader import get_data_dir
+
+_logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 _SAFE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -239,6 +242,22 @@ class PersistenceManager:
 
         if not file_exists:
             os.chmod(file_path, 0o600)
+
+    def append_run_diagnostic(self, session_id: str, record: dict) -> None:
+        """Append one JSON record to <sessions_dir>/<session_id>-runs.jsonl.
+
+        Does not raise on write error — logs a WARNING instead.
+        """
+        self._validate_id(session_id, "session_id")
+        file_path = (self.sessions_dir / f"{session_id}-runs.jsonl").resolve()
+        if self.sessions_dir.resolve() not in file_path.parents:
+            raise ValueError(f"Invalid session_id: {session_id}")
+        try:
+            with open(file_path, "a", encoding="utf-8") as fp:
+                fp.write(json.dumps(record, default=str))
+                fp.write("\n")
+        except OSError as exc:
+            _logger.warning("Failed to append run diagnostic for %s: %s", session_id, exc)
 
     def list_events(self, session_id: str, limit: int | None = None) -> list[dict[str, Any]]:
         file_path = self._event_path(session_id)
