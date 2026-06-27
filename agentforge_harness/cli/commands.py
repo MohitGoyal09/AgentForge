@@ -12,6 +12,7 @@ from agentforge_harness.cli.report import (
 )
 from agentforge_harness.cli.models import list_models_for_config
 from agentforge_harness.cli.setup import API_KEY_ENV, DEFAULT_BASE_URLS, DEFAULT_MODELS
+from agentforge_harness.client.thinking import ThinkingLevel
 from agentforge_harness.config.config import ApprovalPolicy, Config, ModelProvider
 from agentforge_harness.config.loader import (
     get_config_dir,
@@ -49,7 +50,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /doctor /provider /models /model /fallbacks /paths /compact /errors /new /reload /version /plan /build /name /skills /tools /mcp /stats /report /todos /exit",
+                "commands: /help /doctor /provider /models /model /fallbacks /paths /compact /errors /new /reload /version /plan /build /name /skills /tools /mcp /stats /report /todos /thinking /exit",
             ],
             mode=AgentMode.BUILD.value,
         )
@@ -195,6 +196,23 @@ class CLI:
                 self.tui.show_notice(f"Approval set to: {self.config.approval.value}", "Approval")
             except ValueError:
                 self.tui.show_error(f"Unknown approval mode: {argument}")
+            return True
+        if name == "/thinking":
+            if not argument:
+                levels = ", ".join(level.value for level in ThinkingLevel)
+                self.tui.show_notice(
+                    f"Current thinking level: {self.config.thinking_level.value}\nAvailable levels: {levels}",
+                    "Thinking",
+                )
+                return True
+            try:
+                level = ThinkingLevel(argument)
+                self.config.model.thinking = level
+                if self.agent:
+                    self.agent.session.set_thinking_level(level)
+                self.tui.show_notice(f"Thinking level set to: {level.value}", "Thinking")
+            except ValueError:
+                self.tui.show_error(f"Unknown thinking level: {argument}")
             return True
         if name == "/tools":
             if self.agent:
@@ -479,7 +497,7 @@ class CLI:
         known = [
             "/help", "/exit", "/quit", "/clear", "/config", "/provider", "/model", "/models",
             "/fallbacks", "/doctor", "/paths", "/compact", "/errors",
-            "/approval", "/stats", "/todos", "/tools", "/skills", "/skill",
+            "/approval", "/thinking", "/stats", "/todos", "/tools", "/skills", "/skill",
             "/unskill", "/mcp", "/name", "/save", "/sessions", "/resume",
             "/checkpoint", "/checkpoints", "/restore", "/plan", "/build",
             "/new", "/reload", "/version", "/retry", "/history", "/report",

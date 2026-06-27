@@ -1,10 +1,12 @@
 from datetime import datetime
 import json
 import uuid
+from pathlib import Path
 from typing import Any
 from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.agent.subagent_runner import run_subagent
 from agentforge_harness.client.llm_client import LLMClient
+from agentforge_harness.client.thinking import ThinkingLevel
 from agentforge_harness.config.config import Config, ModelProvider
 from agentforge_harness.config.loader import get_data_dir
 from agentforge_harness.context.compaction import ChatCompactor
@@ -54,7 +56,71 @@ class Session:
         self._event_sequence = 0
         self._memory_cache: str | None = None
         self.mode: AgentMode = AgentMode.BUILD
-    
+        self._running: bool = False
+        self._cancel_requested: bool = False
+
+    # ------------------------------------------------------------------
+    # Introspection accessors (read-only)
+    # ------------------------------------------------------------------
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    @property
+    def cwd(self) -> Path:
+        return self.config.cwd
+
+    @property
+    def model_name(self) -> str:
+        return self.config.model_name
+
+    @property
+    def provider_name(self) -> str:
+        return self.config.provider.value
+
+    @property
+    def thinking_level(self) -> ThinkingLevel:
+        return self.config.thinking_level
+
+    @property
+    def tool_names(self) -> list[str]:
+        return [t.name for t in self.tool_registry.get_tools(mode=self.mode)]
+
+    @property
+    def active_skill_names(self) -> list[str]:
+        return list(self.active_skills)
+
+    @property
+    def context_token_estimate(self) -> int:
+        if self.context_manager is None:
+            return 0
+        return self.context_manager.get_context_budget()["total_tokens"]
+
+    @property
+    def context_window_tokens(self) -> int:
+        return self.config.model.context_window
+
+    # ------------------------------------------------------------------
+    # Cooperative cancellation
+    # ------------------------------------------------------------------
+
+    @property
+    def cancel_requested(self) -> bool:
+        return self._cancel_requested
+
+    def request_cancel(self) -> None:
+        """Signal the running agent loop to stop after the current step."""
+        self._cancel_requested = True
+
+    def cancel(self) -> None:
+        """Public alias for request_cancel(); preferred by TUI / external callers."""
+        self.request_cancel()
+
+    def reset_cancel(self) -> None:
+        """Clear any previously requested cancellation."""
+        self._cancel_requested = False
+
     async def initialize(self) -> None:
         await self.mcp_manager.initialize()
         self.mcp_manager.register_tools(self.tool_registry)

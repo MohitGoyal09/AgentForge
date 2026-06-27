@@ -4,6 +4,7 @@ from typing import Any, AsyncGenerator
 
 from agentforge_harness.config.config import Config
 from agentforge_harness.client.providers.base import BaseProvider
+from agentforge_harness.client.thinking import anthropic_thinking_budget
 from agentforge_harness.client.response import (
     StreamEvent,
     StreamEventType,
@@ -128,12 +129,22 @@ class AnthropicProvider(BaseProvider):
         model: str | None,
     ) -> dict[str, Any]:
         system, anthropic_messages = self._to_anthropic_messages(messages)
+        max_tokens = self.config.model.max_output_tokens
         kwargs: dict[str, Any] = {
             "model": model or self.config.model_name,
             "messages": anthropic_messages,
-            "max_tokens": self.config.model.max_output_tokens,
+            "max_tokens": max_tokens,
             "temperature": self.config.temperature,
         }
+
+        budget = anthropic_thinking_budget(self.config.thinking_level)
+        if budget is not None:
+            # Extended thinking requires temperature == 1 and max_tokens above
+            # the thinking budget (the budget is spent before the visible reply).
+            kwargs["temperature"] = 1.0
+            kwargs["max_tokens"] = max(max_tokens, budget + max_tokens)
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+
         if system:
             kwargs["system"] = system
         if anthropic_tools := self._build_anthropic_tools(tools):
@@ -198,6 +209,13 @@ class AnthropicProvider(BaseProvider):
                             yield StreamEvent(
                                 type=StreamEventType.TEXT_DELTA,
                                 text_delta=TextDelta(content=text),
+                            )
+                    elif delta_type == "thinking_delta":
+                        thinking = getattr(delta, "thinking", "")
+                        if thinking:
+                            yield StreamEvent(
+                                type=StreamEventType.THINKING_DELTA,
+                                text_delta=TextDelta(content=thinking),
                             )
                     elif delta_type == "input_json_delta" and event.index in tool_blocks:
                         partial = getattr(delta, "partial_json", "") or ""

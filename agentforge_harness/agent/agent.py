@@ -39,25 +39,32 @@ class Agent:
             logger.warning("Failed to record event %s", event.type, exc_info=True)
 
     async def run(self, message: str):
-        await self.session.hook_system.trigger_before_agent(message)
-        start_event = AgentEvent.agents_start(message)
-        self._record(start_event)
-        yield start_event
-        self.session.context_manager.add_user_message(message)
-        self.session.loop_detector.clear()
+        self.session._running = True
+        try:
+            await self.session.hook_system.trigger_before_agent(message)
+            start_event = AgentEvent.agents_start(message)
+            self._record(start_event)
+            yield start_event
+            self.session.context_manager.add_user_message(message)
+            self.session.loop_detector.clear()
 
-        final_response: str | None = None
+            final_response: str | None = None
 
-        async for event in self._agentic_loop():
-            self._record(event)
-            yield event
+            async for event in self._agentic_loop():
+                self._record(event)
+                yield event
 
-            if event.type == AgentEventType.TEXT_COMPLETE:
-                final_response = event.data.get("content")
-        await self.session.hook_system.trigger_after_agent(message, final_response or "")
-        end_event = AgentEvent.agents_end(final_response)
-        self._record(end_event)
-        yield end_event
+                if event.type == AgentEventType.TEXT_COMPLETE:
+                    final_response = event.data.get("content")
+            await self.session.hook_system.trigger_after_agent(message, final_response or "")
+            end_event = AgentEvent.agents_end(final_response)
+            self._record(end_event)
+            yield end_event
+        finally:
+            self.session._running = False
+            # Clear any cancellation so a stale flag from this run does not
+            # carry over to the next run() call.
+            self.session.reset_cancel()
 
     async def _agentic_loop(self) -> AsyncGenerator[AgentEvent, None]:
         max_turns = self.config.max_turns
@@ -82,6 +89,11 @@ class Agent:
 
         try:
             for _turn in range(max_turns):
+                # Cooperative cancellation: bail before doing any work this turn.
+                if self.session.cancel_requested:
+                    yield AgentEvent.text_delta("\n[Cancelled]")
+                    return
+
                 self.session.increment_turn()
 
                 # check context budget and auto-compress if needed
@@ -195,8 +207,19 @@ class Agent:
                             elif event.type == StreamEventType.MESSAGE_COMPLETE:
                                 usage = event.token_usage
 
+                            # Mid-stream cancellation: stop consuming the stream.
+                            if self.session.cancel_requested:
+                                break
+
                         if saw_error:
                             continue
+
+                        # Post-stream cancellation check: abandon this turn cleanly
+                        # before we execute any tools.
+                        if self.session.cancel_requested:
+                            yield AgentEvent.message_end(content=response_text, role="assistant")
+                            yield AgentEvent.text_delta("\n[Cancelled]")
+                            return
 
                         circuit_breaker.record_success(model_name)
                         llm_success = True

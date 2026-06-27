@@ -58,8 +58,6 @@ class AgentEvent:
     def data(self) -> dict[str, Any]:
         return {}
 
-    # --- lifecycle ---------------------------------------------------------- #
-
     @classmethod
     def agents_start(cls, message: str) -> AgentEvent:
         return AgentStartEvent(message=message)
@@ -72,8 +70,6 @@ class AgentEvent:
     def agents_error(cls, error: str, details: dict[str, Any] | None = None) -> AgentEvent:
         return AgentErrorEvent(error=error, details=details or {})
 
-    # --- message lifecycle -------------------------------------------------- #
-
     @classmethod
     def message_start(cls, role: str = "assistant") -> AgentEvent:
         return MessageStartEvent(role=role)
@@ -81,8 +77,6 @@ class AgentEvent:
     @classmethod
     def message_end(cls, content: str = "", role: str = "assistant") -> AgentEvent:
         return MessageEndEvent(content=content, role=role)
-
-    # --- text + reasoning --------------------------------------------------- #
 
     @classmethod
     def text_delta(cls, content: str) -> AgentEvent:
@@ -96,8 +90,6 @@ class AgentEvent:
     def thinking_delta(cls, content: str) -> AgentEvent:
         return ThinkingDeltaEvent(content=content)
 
-    # --- tools -------------------------------------------------------------- #
-
     @classmethod
     def tool_call_start(cls, call_id: str, name: str, arguments: dict[str, Any]) -> AgentEvent:
         return ToolCallStartEvent(call_id=call_id, name=name, arguments=arguments)
@@ -110,8 +102,6 @@ class AgentEvent:
     def tool_execution_update(cls, call_id: str, name: str, message: str) -> AgentEvent:
         return ToolExecutionUpdateEvent(call_id=call_id, name=name, message=message)
 
-    # --- steering ----------------------------------------------------------- #
-
     @classmethod
     def queue_update(
         cls,
@@ -119,8 +109,6 @@ class AgentEvent:
         follow_up: list[str] | None = None,
     ) -> AgentEvent:
         return QueueUpdateEvent(steering=steering or [], follow_up=follow_up or [])
-
-    # --- diagnostic --------------------------------------------------------- #
 
     @classmethod
     def retry(cls, model: str, attempt: int, error: str, delay: float | None = None) -> AgentEvent:
@@ -143,9 +131,6 @@ class AgentEvent:
         return LoopDetectedEvent(message=message)
 
 
-# --------------------------------------------------------------------------- #
-# Lifecycle
-# --------------------------------------------------------------------------- #
 
 
 @dataclass(frozen=True)
@@ -183,11 +168,6 @@ class AgentErrorEvent(AgentEvent):
         return {"error": self.error, "details": dict(self.details)}
 
 
-# --------------------------------------------------------------------------- #
-# Message lifecycle
-# --------------------------------------------------------------------------- #
-
-
 @dataclass(frozen=True)
 class MessageStartEvent(AgentEvent):
     type: ClassVar[AgentEventType] = AgentEventType.MESSAGE_START
@@ -207,11 +187,6 @@ class MessageEndEvent(AgentEvent):
     @property
     def data(self) -> dict[str, Any]:
         return {"role": self.role, "content": self.content}
-
-
-# --------------------------------------------------------------------------- #
-# Text + reasoning
-# --------------------------------------------------------------------------- #
 
 
 @dataclass(frozen=True)
@@ -242,12 +217,6 @@ class ThinkingDeltaEvent(AgentEvent):
     @property
     def data(self) -> dict[str, Any]:
         return {"content": self.content}
-
-
-# --------------------------------------------------------------------------- #
-# Tools
-# --------------------------------------------------------------------------- #
-
 
 @dataclass(frozen=True)
 class ToolCallStartEvent(AgentEvent):
@@ -295,11 +264,6 @@ class ToolExecutionUpdateEvent(AgentEvent):
         return {"call_id": self.call_id, "name": self.name, "message": self.message}
 
 
-# --------------------------------------------------------------------------- #
-# Steering
-# --------------------------------------------------------------------------- #
-
-
 @dataclass(frozen=True)
 class QueueUpdateEvent(AgentEvent):
     type: ClassVar[AgentEventType] = AgentEventType.QUEUE_UPDATE
@@ -309,11 +273,6 @@ class QueueUpdateEvent(AgentEvent):
     @property
     def data(self) -> dict[str, Any]:
         return {"steering": list(self.steering), "follow_up": list(self.follow_up)}
-
-
-# --------------------------------------------------------------------------- #
-# Diagnostic
-# --------------------------------------------------------------------------- #
 
 
 @dataclass(frozen=True)
