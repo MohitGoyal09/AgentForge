@@ -1,3 +1,5 @@
+import ipaddress
+import socket
 from urllib.parse import urlparse
 
 import httpx
@@ -13,6 +15,36 @@ class WebFetchParams(BaseModel):
         le=120,
         description="Request timeout in seconds (default: 120)",
     )
+
+
+def _is_private_host(hostname: str) -> tuple[bool, str]:
+    """Return (is_blocked, reason).
+
+    BUG H fix: resolve the hostname and reject private/loopback/link-local/
+    reserved/multicast addresses to prevent SSRF against internal services
+    (e.g. cloud metadata endpoints, 127.0.0.1, 10.x/172.16-31.x/192.168.x).
+    """
+    try:
+        results = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        # DNS resolution failed — let the request fail naturally.
+        return False, ""
+
+    for _family, _type, _proto, _canonname, sockaddr in results:
+        ip_str = sockaddr[0]
+        try:
+            addr = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+        ):
+            return True, ip_str
+    return False, ""
 
 
 class WebFetchTool(Tool):
@@ -31,6 +63,17 @@ class WebFetchTool(Tool):
                 summary=f"Invalid URL scheme: {params.url}",
                 recovery_hint="Ensure the URL starts with http:// or https://, then retry.",
             )
+
+        # BUG H fix: block requests to private/loopback/link-local/reserved hosts.
+        hostname = parsed.hostname or ""
+        if hostname:
+            blocked, resolved_ip = _is_private_host(hostname)
+            if blocked:
+                return ToolResult.error_result(
+                    f"Blocked: {hostname} resolves to a private/reserved address ({resolved_ip})",
+                    summary=f"SSRF protection blocked request to {params.url}",
+                    recovery_hint="Only public internet URLs are allowed.",
+                )
 
         try:
             async with httpx.AsyncClient(

@@ -75,3 +75,46 @@ class TestWebFetchTool:
             ToolInvocation(params={"url": "https://nonexistent.invalid"}, cwd=invocation.cwd)
         )
         assert result.recovery_hint
+
+    # ------------------------------------------------------------------
+    # BUG H — SSRF: private/loopback addresses must be blocked
+    # ------------------------------------------------------------------
+
+    async def test_loopback_address_is_blocked(self, web_fetch_tool, invocation):
+        """BUG H: requests to 127.0.0.1 must return an error, not make a connection."""
+        result = await web_fetch_tool.execute(
+            ToolInvocation(params={"url": "http://127.0.0.1/"}, cwd=invocation.cwd)
+        )
+        assert not result.success
+        error_text = (result.error or "") + result.output
+        assert any(
+            kw in error_text.lower() for kw in ("blocked", "private", "reserved", "forbidden", "ssrf")
+        )
+
+    async def test_cloud_metadata_endpoint_is_blocked(self, web_fetch_tool, invocation):
+        """BUG H: the AWS/GCP/Azure metadata endpoint 169.254.169.254 is link-local
+        and must be blocked."""
+        result = await web_fetch_tool.execute(
+            ToolInvocation(
+                params={"url": "http://169.254.169.254/"}, cwd=invocation.cwd
+            )
+        )
+        assert not result.success
+        error_text = (result.error or "") + result.output
+        assert any(
+            kw in error_text.lower() for kw in ("blocked", "private", "reserved", "forbidden", "ssrf", "link-local", "link_local")
+        )
+
+    async def test_private_class_a_network_is_blocked(self, web_fetch_tool, invocation):
+        """10.x.x.x is a private RFC-1918 range and must be blocked."""
+        result = await web_fetch_tool.execute(
+            ToolInvocation(params={"url": "http://10.0.0.1/"}, cwd=invocation.cwd)
+        )
+        assert not result.success
+
+    async def test_localhost_hostname_is_blocked(self, web_fetch_tool, invocation):
+        """'localhost' resolves to 127.0.0.1 which is loopback and must be blocked."""
+        result = await web_fetch_tool.execute(
+            ToolInvocation(params={"url": "http://localhost/"}, cwd=invocation.cwd)
+        )
+        assert not result.success

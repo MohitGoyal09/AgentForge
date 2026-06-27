@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -68,3 +69,57 @@ def test_default_registry_wires_subagent_runner(tmp_path: Path):
     ]
     assert subagent_tools, "expected default subagent tools to be registered"
     assert all(tool._runner is run_subagent for tool in subagent_tools)
+
+
+# ---------------------------------------------------------------------------
+# BUG F — stalled runner must be interrupted by the timeout
+# ---------------------------------------------------------------------------
+
+
+async def test_subagent_timeout_terminates_stalled_runner(tmp_path: Path):
+    """BUG F: a runner that sleeps longer than timeout_seconds must produce a
+    'timeout' termination result, not hang indefinitely."""
+
+    async def stalling_runner(config: Config, prompt: str) -> AsyncIterator[AgentEvent]:
+        # Sleep far longer than the tiny timeout used in the definition below.
+        await asyncio.sleep(10)
+        yield AgentEvent.text_complete("never reached")  # pragma: no cover
+
+    definition = SubagentDefinition(
+        name="staller",
+        description="stalls forever",
+        goal_prompt="stall",
+        allowed_tools=["read_file"],
+        max_turns=5,
+        timeout_seconds=0.05,  # 50 ms — triggers well before the 10 s sleep
+    )
+
+    tool = SubagentTool(Config(cwd=tmp_path), definition, runner=stalling_runner)
+    result = await tool.execute(ToolInvocation(params={"goal": "stall"}, cwd=tmp_path))
+
+    # The tool completes (success=True because it terminated via timeout, not error)
+    # and the output describes the timeout.
+    assert "timeout" in result.output.lower()
+
+
+async def test_subagent_completes_normally_within_timeout(tmp_path: Path):
+    """A fast runner that finishes before the timeout must succeed normally."""
+
+    async def fast_runner(config: Config, prompt: str) -> AsyncIterator[AgentEvent]:
+        yield AgentEvent.text_complete("done quickly")
+        yield AgentEvent.agents_end("done quickly")
+
+    definition = SubagentDefinition(
+        name="fast",
+        description="finishes fast",
+        goal_prompt="go fast",
+        allowed_tools=["read_file"],
+        max_turns=5,
+        timeout_seconds=5.0,
+    )
+
+    tool = SubagentTool(Config(cwd=tmp_path), definition, runner=fast_runner)
+    result = await tool.execute(ToolInvocation(params={"goal": "go"}, cwd=tmp_path))
+
+    assert result.success
+    assert "done quickly" in result.output

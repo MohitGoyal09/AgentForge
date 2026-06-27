@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Awaitable
 
 import pytest
 
@@ -10,6 +11,7 @@ from agentforge_harness.safety.approval import (
     ApprovalDecision,
     ApprovalManager,
 )
+from agentforge_harness.tools.base import ToolConfirmation
 
 
 def _ctx(
@@ -148,3 +150,85 @@ async def test_dangerous_flag_needs_confirmation(tmp_path: Path):
     )
 
     assert decision == ApprovalDecision.NEEDS_CONFIRMATION
+
+
+# ---------------------------------------------------------------------------
+# BUG C — path traversal sequences must be rejected as workspace escapes
+# ---------------------------------------------------------------------------
+
+
+async def test_traversal_path_escaping_cwd_needs_confirmation(tmp_path: Path):
+    """BUG C: a path like cwd/../sibling resolves outside cwd and must be treated
+    as a workspace escape (NEEDS_CONFIRMATION) under ON_REQUEST policy."""
+    manager = _manager(ApprovalPolicy.ON_REQUEST, tmp_path)
+    # Construct a path that *literally* points inside cwd but traverses out when resolved
+    traversal_path = tmp_path / ".." / "escaped_file.txt"
+
+    decision = await manager.check_approval(
+        _ctx(cwd=tmp_path, affected_paths=[traversal_path])
+    )
+
+    assert decision == ApprovalDecision.NEEDS_CONFIRMATION
+
+
+async def test_traversal_path_is_rejected_as_out_of_workspace(tmp_path: Path):
+    """A traversal that exits cwd is detected even under AUTO_EDIT."""
+    manager = _manager(ApprovalPolicy.AUTO_EDIT, tmp_path)
+    traversal_path = tmp_path / ".." / "escaped.txt"
+
+    decision = await manager.check_approval(
+        _ctx(cwd=tmp_path, affected_paths=[traversal_path])
+    )
+
+    # AUTO_EDIT confirms workspace-escaping writes.
+    assert decision == ApprovalDecision.NEEDS_CONFIRMATION
+
+
+# ---------------------------------------------------------------------------
+# BUG D — async confirmation callback must be awaited (not returned as coroutine)
+# ---------------------------------------------------------------------------
+
+
+async def test_async_callback_is_awaited_and_result_honoured(tmp_path: Path):
+    """BUG D: an async callback returning False must cause request_confirmation
+    to return False, proving the coroutine was actually awaited."""
+
+    async def refusing_callback(confirmation: ToolConfirmation) -> bool:
+        return False
+
+    manager = ApprovalManager(
+        ApprovalPolicy.ON_REQUEST,
+        tmp_path,
+        confirmation_callback=refusing_callback,
+    )
+    confirmation = ToolConfirmation(
+        tool_name="some_tool",
+        params={},
+        description="do something",
+    )
+
+    result = await manager.request_confirmation(confirmation)
+
+    assert result is False
+
+
+async def test_async_callback_returning_true_is_honoured(tmp_path: Path):
+    """An async callback returning True must result in approval."""
+
+    async def approving_callback(confirmation: ToolConfirmation) -> bool:
+        return True
+
+    manager = ApprovalManager(
+        ApprovalPolicy.ON_REQUEST,
+        tmp_path,
+        confirmation_callback=approving_callback,
+    )
+    confirmation = ToolConfirmation(
+        tool_name="some_tool",
+        params={},
+        description="do something",
+    )
+
+    result = await manager.request_confirmation(confirmation)
+
+    assert result is True

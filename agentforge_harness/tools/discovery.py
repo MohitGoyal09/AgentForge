@@ -1,6 +1,7 @@
 import importlib
 import importlib.util
 import inspect
+import logging
 from pathlib import Path
 from agentforge_harness.config.config import Config
 from agentforge_harness.tools.base import Tool
@@ -9,18 +10,23 @@ from typing import Any
 import sys
 from agentforge_harness.config.loader import get_config_dir
 
+logger = logging.getLogger(__name__)
+
 class ToolDiscoveryManager:
     def __init__(self , config : Config , registry : ToolRegistry ) :
         self.config = config
         self.registry = registry
-    
-   
+
+
     def _load_tool_modules(self, file_path : Path ) -> Any:
-        module_name = f'discovered_tool_{file_path.stem}'
+        # BUG E fix: use an absolute-path-derived unique name to avoid stem
+        # collisions when two dirs contain files with the same filename.
+        module_name = f'discovered_tool_{abs(hash(str(file_path.resolve())))}'
         spec = importlib.util.spec_from_file_location(module_name , file_path)
 
         if spec is None or spec.loader is None:
-            return ImportError(f'Could not load spec from {file_path}')
+            # BUG E fix: was `return ImportError(...)` — must raise, not return.
+            raise ImportError(f'Could not load spec from {file_path}')
 
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
@@ -33,13 +39,13 @@ class ToolDiscoveryManager:
         for name in dir(module):
             obj = getattr(module , name)
             if (
-                inspect.isclass(obj) 
-                and issubclass(obj , Tool) 
-                and obj is not Tool 
-                and obj.__module__ == module.__name__ 
+                inspect.isclass(obj)
+                and issubclass(obj , Tool)
+                and obj is not Tool
+                and obj.__module__ == module.__name__
             ):
              tools.append(obj)
-        
+
         return tools
 
 
@@ -49,24 +55,28 @@ class ToolDiscoveryManager:
 
         if not tool_dir.exists() or not tool_dir.is_dir():
             return
-        
+
         for py_file in tool_dir.glob('*.py'):
             try:
                 if py_file.name.startswith('__'):
                         continue
-                        
+
                 module = self._load_tool_modules(py_file)
                 tool_classes = self._find_tool_classes(module)
 
                 if not tool_classes:
-                        continue 
+                        continue
 
                 for tool_class in tool_classes:
                     tool = tool_class(self.config)
 
                     self.registry.register(tool)
             except Exception:
-                 continue
+                # BUG E fix: log failures instead of swallowing them silently.
+                logger.warning(
+                    "Failed to load tool module from %s", py_file, exc_info=True
+                )
+                continue
 
     def discover_all(self) -> None:
         self.discover_from_directory(self.config.cwd)
