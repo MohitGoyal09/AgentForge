@@ -59,12 +59,12 @@ class AgentEvent:
         return {}
 
     @classmethod
-    def agents_start(cls, message: str) -> AgentEvent:
-        return AgentStartEvent(message=message)
+    def agents_start(cls, message: str, run_id: str | None = None) -> AgentEvent:
+        return AgentStartEvent(message=message, run_id=run_id)
 
     @classmethod
-    def agents_end(cls, response: str | None = None, usage: TokenUsage | None = None) -> AgentEvent:
-        return AgentEndEvent(response=response, usage=usage)
+    def agents_end(cls, response: str | None = None, usage: TokenUsage | None = None, run_id: str | None = None) -> AgentEvent:
+        return AgentEndEvent(response=response, usage=usage, run_id=run_id)
 
     @classmethod
     def agents_error(cls, error: str, details: dict[str, Any] | None = None) -> AgentEvent:
@@ -137,10 +137,11 @@ class AgentEvent:
 class AgentStartEvent(AgentEvent):
     type: ClassVar[AgentEventType] = AgentEventType.AGENT_START
     message: str
+    run_id: str | None = None
 
     @property
     def data(self) -> dict[str, Any]:
-        return {"message": self.message}
+        return {"message": self.message, "run_id": self.run_id}
 
 
 @dataclass(frozen=True)
@@ -148,12 +149,14 @@ class AgentEndEvent(AgentEvent):
     type: ClassVar[AgentEventType] = AgentEventType.AGENT_END
     response: str | None = None
     usage: TokenUsage | None = None
+    run_id: str | None = None
 
     @property
     def data(self) -> dict[str, Any]:
         return {
             "response": self.response,
             "usage": self.usage.__dict__ if self.usage else None,
+            "run_id": self.run_id,
         }
 
 

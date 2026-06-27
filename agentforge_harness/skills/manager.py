@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ast
+import logging
 from pathlib import Path
 import re
+
+_MAX_SKILL_BODY_CHARS = 32_000
+_logger = logging.getLogger(__name__)
 
 
 _FRONTMATTER_DELIMITER = "---"
@@ -90,6 +94,20 @@ class SkillManager:
         metadata = self.get_skill(name)
         body = metadata.path.read_text(encoding="utf-8")
         body = self._strip_frontmatter(body)
+
+        original_len = len(body)
+        if original_len > _MAX_SKILL_BODY_CHARS:
+            body = (
+                body[:_MAX_SKILL_BODY_CHARS]
+                + "\n\n[... skill content truncated for compaction; use Read on the skill path if you need the full text]"
+            )
+            _logger.warning(
+                "Skill %s truncated from %d to %d chars",
+                name,
+                original_len,
+                _MAX_SKILL_BODY_CHARS,
+            )
+
         self._loaded[name] = body
         return body
 
@@ -101,6 +119,33 @@ class SkillManager:
 
     def unload_skill(self, name: str) -> bool:
         return self._loaded.pop(name, None) is not None
+
+    def get_active_allowed_tools(self, active_skills: list[str]) -> list[str] | None:
+        """Return the union of allowed_tools for all active skills that specify it.
+
+        Returns None if no active skill specifies allowed_tools (= no restriction).
+        Returns an empty list [] if at least one skill specifies allowed_tools=[]
+        (= nothing allowed beyond builtins).
+        """
+        any_restriction = False
+        union: list[str] = []
+        seen: set[str] = set()
+
+        for name in active_skills:
+            metadata = self._available.get(name)
+            if metadata is None:
+                continue
+            if metadata.allowed_tools is None:
+                continue
+            any_restriction = True
+            for tool in metadata.allowed_tools:
+                if tool not in seen:
+                    seen.add(tool)
+                    union.append(tool)
+
+        if not any_restriction:
+            return None
+        return union
 
     def get_active_skill_bodies(self, active_skills: list[str]) -> dict[str, str]:
         bodies: dict[str, str] = {}
@@ -246,7 +291,7 @@ class SkillManager:
             return None
 
         parsed = self._parse_tool_list(raw_value)
-        return parsed or None
+        return parsed  # preserve explicit empty list; None already returned above when raw_value is absent
 
     def _parse_tool_list(self, value: str) -> list[str]:
         text = value.strip()

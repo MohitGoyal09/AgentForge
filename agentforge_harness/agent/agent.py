@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import random
+import uuid
 from typing import AsyncGenerator, Awaitable, Callable
 from agentforge_harness.agent.events import AgentEvent, AgentEventType
 from agentforge_harness.agent.modes import AgentMode
@@ -39,10 +40,15 @@ class Agent:
             logger.warning("Failed to record event %s", event.type, exc_info=True)
 
     async def run(self, message: str):
+        run_id = str(uuid.uuid4())
         self.session._running = True
+        self.session.persistence.append_run_diagnostic(
+            self.session.session_id,
+            {"run_id": run_id, "session_id": self.session.session_id, "message_preview": message[:120]},
+        )
         try:
             await self.session.hook_system.trigger_before_agent(message)
-            start_event = AgentEvent.agents_start(message)
+            start_event = AgentEvent.agents_start(message, run_id=run_id)
             self._record(start_event)
             yield start_event
             self.session.context_manager.add_user_message(message)
@@ -57,9 +63,13 @@ class Agent:
                 if event.type == AgentEventType.TEXT_COMPLETE:
                     final_response = event.data.get("content")
             await self.session.hook_system.trigger_after_agent(message, final_response or "")
-            end_event = AgentEvent.agents_end(final_response)
+            end_event = AgentEvent.agents_end(final_response, run_id=run_id)
             self._record(end_event)
             yield end_event
+            self.session.persistence.append_run_diagnostic(
+                self.session.session_id,
+                {"run_id": run_id, "event": "end"},
+            )
         finally:
             self.session._running = False
             # Clear any cancellation so a stale flag from this run does not

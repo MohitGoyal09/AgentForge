@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -6,6 +8,8 @@ from enum import Enum
 from fastmcp import Client
 from fastmcp.client.transports import SSETransport, StdioTransport
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 class MCPServerStatus(str, Enum):
@@ -78,6 +82,42 @@ class MCPClient:
         except Exception:
             self.status = MCPServerStatus.ERROR
             raise
+
+    async def reconnect(self, max_attempts: int = 3, base_delay: float = 1.0) -> bool:
+        """Try to (re)connect with exponential backoff.
+
+        Returns True if a connection was established, False otherwise.
+        Does NOT raise on failure.
+        """
+        self._tools.clear()
+        if self._client:
+            try:
+                await self._client.__aexit__(None, None, None)
+            except Exception:
+                pass
+            self._client = None
+        self.status = MCPServerStatus.DISCONNECTED
+        for attempt in range(max_attempts):
+            logger.info(
+                "MCP server %r reconnect attempt %d/%d",
+                self.name,
+                attempt + 1,
+                max_attempts,
+            )
+            try:
+                await self.connect()
+                return True
+            except Exception as exc:
+                logger.warning(
+                    "MCP server %r reconnect attempt %d failed: %s",
+                    self.name,
+                    attempt + 1,
+                    exc,
+                )
+                if attempt < max_attempts - 1:
+                    delay = base_delay * (2 ** attempt)
+                    await asyncio.sleep(delay)
+        return False
 
     async def disconnect(self) -> None:
         if self._client:
