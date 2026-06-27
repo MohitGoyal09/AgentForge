@@ -129,3 +129,71 @@ async def test_retry_emits_structured_retry_event(tmp_path: Path, monkeypatch):
     assert retry_events, "expected a RETRY event after a transient provider error"
     assert retry_events[0].model == "test/model"
     assert "rate limited" in retry_events[0].error
+
+
+class _ThinkingThenTextClient:
+    async def chat_completion(self, messages, tools=None, **kwargs):
+        yield StreamEvent(
+            type=StreamEventType.THINKING_DELTA,
+            text_delta=TextDelta(content="reasoning..."),
+        )
+        yield StreamEvent(type=StreamEventType.TEXT_DELTA, text_delta=TextDelta(content="answer"))
+        yield StreamEvent(
+            type=StreamEventType.MESSAGE_COMPLETE,
+            token_usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+        )
+
+
+async def test_thinking_delta_is_emitted(tmp_path: Path):
+    agent, _ = _agent_with(tmp_path, _ThinkingThenTextClient())
+
+    events = [event async for event in agent.run("hi")]
+    thinking_events = [e for e in events if e.type == AgentEventType.THINKING_DELTA]
+
+    assert thinking_events, "expected at least one THINKING_DELTA event"
+    assert thinking_events[0].content == "reasoning..."
+
+
+class _PartialThenErrorThenOkClient:
+    """First call: emits partial text then errors. Second call: succeeds fully."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completion(self, messages, tools=None, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            yield StreamEvent(type=StreamEventType.TEXT_DELTA, text_delta=TextDelta(content="Hello"))
+            yield StreamEvent(type=StreamEventType.ERROR, error="stream cut")
+            return
+        yield StreamEvent(type=StreamEventType.TEXT_DELTA, text_delta=TextDelta(content="Hello world"))
+        yield StreamEvent(
+            type=StreamEventType.MESSAGE_COMPLETE,
+            token_usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+        )
+
+
+async def test_retry_does_not_restream_partial_text(tmp_path: Path, monkeypatch):
+    async def _no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr("agentforge_harness.agent.agent.asyncio.sleep", _no_sleep)
+    agent, _ = _agent_with(tmp_path, _PartialThenErrorThenOkClient())
+
+    events = [event async for event in agent.run("hi")]
+    text_deltas = [e for e in events if e.type == AgentEventType.TEXT_DELTA]
+    delta_contents = [e.content for e in text_deltas if not e.content.startswith("\n[")]
+
+    # The partial "Hello" from the failed first attempt should appear exactly
+    # once as a raw TEXT_DELTA (yielded during that attempt).  The second call
+    # returns "Hello world" as a single delta — also exactly once.  What we
+    # must NOT see is a standalone "Hello" delta emitted a second time as a
+    # replay of the first attempt's partial output.
+    standalone_hello = [c for c in delta_contents if c == "Hello"]
+    assert len(standalone_hello) == 1, (
+        f"Partial text 'Hello' was re-emitted. Non-noise TEXT_DELTA contents: {delta_contents!r}"
+    )
+
+    # The run must still complete (AGENT_END present)
+    types = [e.type for e in events]
+    assert AgentEventType.AGENT_END in types

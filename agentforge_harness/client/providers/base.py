@@ -76,6 +76,14 @@ class BaseProvider(abc.ABC):
                     error=self._format_error(exc),
                 )
                 return
+            except Exception as exc:
+                # Non-retryable exception: convert to a terminal ERROR event so
+                # the agent loop never sees a raw exception from the provider.
+                yield StreamEvent(
+                    type=StreamEventType.ERROR,
+                    error=self._format_error(exc),
+                )
+                return
 
     async def close(self) -> None:
         """Release any underlying network clients. Override as needed."""

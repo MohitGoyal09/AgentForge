@@ -3,7 +3,7 @@ import asyncio
 import json
 import logging
 import random
-from typing import AsyncGenerator, Callable
+from typing import AsyncGenerator, Awaitable, Callable
 from agentforge_harness.agent.events import AgentEvent, AgentEventType
 from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.agent.session import Session
@@ -20,7 +20,7 @@ class Agent:
     def __init__(
         self,
         config: Config,
-        confirmation_callback: Callable[[ToolConfirmation], bool] | None = None,
+        confirmation_callback: Callable[[ToolConfirmation], Awaitable[bool]] | None = None,
         record_events: bool = True,
     ):
         self.config = config
@@ -172,14 +172,27 @@ class Agent:
                                     content = event.text_delta.content
                                     response_text += content
                                     yield AgentEvent.text_delta(content)
+                            elif event.type == StreamEventType.THINKING_DELTA:
+                                if event.text_delta:
+                                    yield AgentEvent.thinking_delta(event.text_delta.content)
                             elif event.type == StreamEventType.TOOL_CALL_COMPLETE:
                                 if event.tool_call:
                                     tool_calls.append(event.tool_call)
                             elif event.type == StreamEventType.ERROR:
                                 circuit_breaker.record_failure(model_name)
-                                if attempt < max_llm_retries and circuit_breaker.can_try(model_name):
+                                err_msg = event.error or "unknown error"
+                                if response_text:
+                                    # Partial text was already streamed to the
+                                    # consumer this attempt — retrying would
+                                    # re-stream those bytes. Surface the failure
+                                    # directly instead of retrying or sleeping.
+                                    yield AgentEvent.text_delta(
+                                        f"\n[{model_name} error after partial output: {err_msg}, trying fallback...]"
+                                    )
+                                    saw_error = True
+                                    break
+                                elif attempt < max_llm_retries and circuit_breaker.can_try(model_name):
                                     wait = 2 ** attempt + random.uniform(0, 1)
-                                    err_msg = event.error or "unknown error"
                                     yield AgentEvent.retry(
                                         model=model_name,
                                         attempt=attempt + 1,
@@ -397,6 +410,7 @@ class Agent:
                 self.session.save_checkpoint(mode="crash")
             except Exception:
                 logger.warning("Failed to save crash checkpoint")
+            yield AgentEvent.message_end(content="", role="assistant")
             yield AgentEvent.agents_error(
                 f"Internal agent error: {str(e)}",
                 details={"turn": self.session._turn_count},
