@@ -6,6 +6,12 @@ from typing import Any
 from agentforge_harness.agent.modes import AgentMode
 from agentforge_harness.agent.subagent_runner import run_subagent
 from agentforge_harness.agent.session_store import SessionTreeStore, migrate_snapshot_to_entries
+from agentforge_harness.agent.session_tree import (
+    KIND_MESSAGE,
+    SessionEntry,
+    active_leaf_id,
+    path_to_entry,
+)
 from agentforge_harness.client.llm_client import LLMClient
 from agentforge_harness.client.thinking import ThinkingLevel
 from agentforge_harness.config.config import Config, ModelProvider
@@ -294,6 +300,77 @@ class Session:
         if todo_tool and hasattr(todo_tool, "_todos"):
             getattr(todo_tool, "_todos").clear()
             getattr(todo_tool, "_todos").update(snapshot.todos)
+
+    # ------------------------------------------------------------------
+    # Branching API (P2.1 layer 4)
+    # ------------------------------------------------------------------
+
+    def tree_choices(self) -> list[dict]:
+        """Return the list of branchable points on the current active path.
+
+        Each item has: id, role, preview (≤80 chars), position (0-based index
+        among KIND_MESSAGE entries on the active path).  Only KIND_MESSAGE
+        entries are returned — compaction/leaf/info nodes are not branchable.
+        Returns [] when there is no context manager or no entries.
+        """
+        if not self.context_manager:
+            return []
+        entries = self.context_manager.get_entries()
+        if not entries:
+            return []
+        tip = active_leaf_id(entries)
+        if tip is None:
+            return []
+        try:
+            path = path_to_entry(entries, tip)
+        except ValueError:
+            return []
+        choices = []
+        pos = 0
+        for entry in path:
+            if entry.kind == KIND_MESSAGE:
+                content = entry.payload.get("content") or ""
+                choices.append(
+                    {
+                        "id": entry.id,
+                        "role": entry.payload.get("role", ""),
+                        "preview": content[:80].replace("\n", " "),
+                        "position": pos,
+                    }
+                )
+                pos += 1
+        return choices
+
+    def branch_to_entry(self, entry_id: str) -> None:
+        """Rewind the live session to the message identified by *entry_id*.
+
+        Appends a KIND_LEAF pointer (so the original branch remains intact and
+        reconstructable), then calls load_from_entries so live messages reflect
+        the rewound path.  Persists the updated entry list via tree_store.
+
+        Raises RuntimeError if the session is not initialized, and ValueError
+        if *entry_id* is not a KIND_MESSAGE entry on the current entry log.
+        """
+        if not self.context_manager:
+            raise RuntimeError("Session is not initialized")
+        entries = self.context_manager.get_entries()
+        index = {e.id: e for e in entries}
+        if entry_id not in index:
+            raise ValueError(f"Unknown entry_id: {entry_id!r}")
+        target = index[entry_id]
+        if target.kind != KIND_MESSAGE:
+            raise ValueError(
+                f"entry_id {entry_id!r} is kind {target.kind!r}; only KIND_MESSAGE entries are branchable"
+            )
+
+        leaf = SessionEntry.leaf(
+            parent_id=self.context_manager._last_entry_id,
+            timestamp=datetime.now().isoformat(),
+            entry_id_target=entry_id,
+        )
+        entries.append(leaf)
+        self.context_manager.load_from_entries(entries)
+        self.tree_store.write_all(self.session_id, entries)
 
     def save_session(self, mode: str | None = None) -> None:
         snapshot = self.create_snapshot(mode=mode)

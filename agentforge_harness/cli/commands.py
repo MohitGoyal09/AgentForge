@@ -50,7 +50,7 @@ class CLI:
                 f"model: {self.config.model_name}",
                 f"cwd: {self.config.cwd}",
                 f"approval: {self.config.approval.value}",
-                "commands: /help /doctor /provider /models /model /fallbacks /paths /compact /errors /new /reload /version /plan /build /name /skills /tools /mcp /stats /report /todos /thinking /exit",
+                "commands: /help /doctor /provider /models /model /fallbacks /paths /compact /errors /new /reload /version /plan /build /name /skills /tools /mcp /stats /report /todos /thinking /branch /exit",
             ],
             mode=AgentMode.BUILD.value,
         )
@@ -358,6 +358,49 @@ class CLI:
                 self.tui.show_notice("Session reset to clean state")
             return True
 
+        if name in {"/branch", "/rewind"}:
+            if not self.agent or not self.agent.session:
+                return True
+            session = self.agent.session
+            choices = session.tree_choices()
+            if not argument:
+                self.tui.show_branch_choices(choices)
+                return True
+            # Resolve by position number or by entry-id prefix
+            target_id: str | None = None
+            if argument.isdigit():
+                pos = int(argument)
+                for choice in choices:
+                    if choice["position"] == pos:
+                        target_id = choice["id"]
+                        break
+                if target_id is None:
+                    self.tui.show_error(f"No branch point at position {pos}. Run /branch to list choices.")
+                    return True
+            else:
+                # treat as entry_id prefix
+                matches = [c["id"] for c in choices if c["id"].startswith(argument)]
+                if len(matches) == 0:
+                    self.tui.show_error(f"No branch point matches: {argument!r}. Run /branch to list choices.")
+                    return True
+                if len(matches) > 1:
+                    self.tui.show_error(f"Ambiguous prefix {argument!r} matches {len(matches)} entries. Use more characters.")
+                    return True
+                target_id = matches[0]
+            try:
+                session.branch_to_entry(target_id)
+            except ValueError as exc:
+                self.tui.show_error(str(exc))
+                return True
+            entry_preview = next(
+                (c["preview"][:60] for c in choices if c["id"] == target_id), target_id
+            )
+            self.tui.show_notice(
+                f"Rewound to: {entry_preview!r}\nNew messages will extend from this point.",
+                "Branch",
+            )
+            return True
+
         if name == "/reload":
             if self.agent and self.agent.session:
                 from agentforge_harness.config.loader import load_config
@@ -501,7 +544,7 @@ class CLI:
             "/unskill", "/mcp", "/name", "/save", "/sessions", "/resume",
             "/checkpoint", "/checkpoints", "/restore", "/plan", "/build",
             "/new", "/reload", "/version", "/retry", "/history", "/report",
-            "/export",
+            "/export", "/branch", "/rewind",
         ]
         matches = difflib.get_close_matches(name, known, n=3, cutoff=0.4)
         msg = f"Unknown command: {name}"

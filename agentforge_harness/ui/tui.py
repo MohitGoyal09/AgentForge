@@ -589,6 +589,50 @@ class TUI:
             )
         )
 
+    def show_branch_choices(self, choices: list[dict[str, Any]]) -> None:
+        if not choices:
+            self.console.print(
+                Panel(
+                    Text("No branchable messages in current session", style="muted"),
+                    title=Text("Branch / Rewind", style="highlight"),
+                    title_align="left",
+                    border_style="border",
+                    box=box.ROUNDED,
+                    padding=(0, 2),
+                )
+            )
+            return
+
+        table = Table(
+            box=box.SIMPLE,
+            show_header=True,
+            header_style="highlight",
+            expand=True,
+        )
+        table.add_column("#", style="muted", no_wrap=True, width=4)
+        table.add_column("Role", style="code", no_wrap=True, width=12)
+        table.add_column("Preview", style="assistant", overflow="fold")
+        table.add_column("ID", style="muted", no_wrap=True, width=14)
+
+        for choice in choices:
+            pos = str(choice.get("position", ""))
+            role = str(choice.get("role", ""))
+            preview = str(choice.get("preview", ""))
+            entry_id = str(choice.get("id", ""))
+            table.add_row(pos, role, preview, entry_id[:12] + "…")
+
+        self.console.print(
+            Panel(
+                table,
+                title=Text(f"Branch / Rewind  ({len(choices)} points)", style="highlight"),
+                title_align="left",
+                border_style="border",
+                box=box.ROUNDED,
+                padding=(1, 2),
+                subtitle=Text("Usage: /branch <#> or /branch <entry-id>", style="muted"),
+            )
+        )
+
     def show_stats(self, stats: dict[str, Any]) -> None:
         table = Table.grid(padding=(0, 2))
         table.add_column(style="muted", no_wrap=True)
