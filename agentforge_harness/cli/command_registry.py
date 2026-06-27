@@ -626,7 +626,7 @@ async def _h_history(argument: str, ctx: CommandContext) -> CommandResult:
     n = 10
     if argument:
         try:
-            n = int(argument)
+            n = max(int(argument), 1)
         except ValueError:
             pass
     recent = msgs[-n:] if len(msgs) > n else msgs

@@ -1175,6 +1175,8 @@ class TUI:
 - `/restore <checkpoint_id>` - Restore a checkpoint
 - `/sessions` - List saved sessions
 - `/resume <session_id>` - Resume a saved session
+- `/branch` - Show branchable messages; `/branch <id>` rewinds to that message
+- `/rewind <id>` - Alias for `/branch <id>`
 
 ## Tips
 
