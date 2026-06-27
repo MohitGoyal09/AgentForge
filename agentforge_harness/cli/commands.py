@@ -74,8 +74,10 @@ class CLI:
                     self._last_user_message = user_input
                     await self._process_message(user_input)
 
-                except (KeyboardInterrupt, asyncio.CancelledError):
+                except KeyboardInterrupt:
                     console.print("\n[dim]Use /exit to quit[/dim]")
+                except asyncio.CancelledError:
+                    raise
                 except EOFError:
                     break
         console.print("\n[dim]GoodBye![/dim]")

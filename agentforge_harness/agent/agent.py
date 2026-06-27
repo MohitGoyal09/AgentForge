@@ -389,21 +389,23 @@ class Agent:
                         tool_result.content,
                     )
 
-                # Steer drain: inject any steering message the user queued while
-                # this tool batch was running.  Injection happens here — after all
-                # tool results are committed — so the transcript is coherent
-                # (assistant + tool_calls + tool_results all present).
+                # Steer drain: pop any steering message queued while this tool
+                # batch ran.  Injection happens after ALL tool results are committed
+                # so the transcript is coherent (assistant + tool_calls + results).
+                # We do NOT inject yet if force_plan_response or loop_detection will
+                # add their own user message — consecutive user messages are invalid.
                 _steer = self.session._steering_queue.pop_steer()
-                if _steer is not None:
-                    self.session.context_manager.add_user_message(_steer)
-                    yield AgentEvent.queue_update(steering=[_steer], follow_up=[])
 
                 if force_plan_response and self.session.mode == AgentMode.PLAN:
-                    self.session.context_manager.add_user_message(
+                    plan_notice = (
                         "SYSTEM NOTICE: Plan mode has enough context or is repeating tool exploration. "
                         "Do not call more tools. Produce the final plan now, with goal, approach, steps, "
                         "files to change, open questions, and the reminder to switch to /build for implementation."
                     )
+                    combined = f"{_steer}\n\n{plan_notice}" if _steer else plan_notice
+                    self.session.context_manager.add_user_message(combined)
+                    if _steer:
+                        yield AgentEvent.queue_update(steering=[_steer], follow_up=[])
                     self.session.loop_detector.clear()
                     self.session.context_manager.prune_tool_outputs()
                     continue
@@ -416,10 +418,18 @@ class Agent:
                 if loop_detection_error:
                     yield AgentEvent.loop_detected(loop_detection_error)
                     loop_prompt = create_loop_breaker_prompt(loop_detection_error)
-                    self.session.context_manager.add_user_message(loop_prompt)
+                    combined = f"{_steer}\n\n{loop_prompt}" if _steer else loop_prompt
+                    self.session.context_manager.add_user_message(combined)
+                    if _steer:
+                        yield AgentEvent.queue_update(steering=[_steer], follow_up=[])
                     self.session.loop_detector.clear()
                     self.session.context_manager.prune_tool_outputs()
                     continue
+
+                # Normal path: no system override — inject steer if present.
+                if not self.session.cancel_requested and _steer is not None:
+                    self.session.context_manager.add_user_message(_steer)
+                    yield AgentEvent.queue_update(steering=[_steer], follow_up=[])
 
                 self.session.context_manager.prune_tool_outputs()
 
