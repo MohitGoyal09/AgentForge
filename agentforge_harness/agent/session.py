@@ -27,6 +27,7 @@ from agentforge_harness.tools.discovery import ToolDiscoveryManager
 from agentforge_harness.skills.manager import SkillManager
 from agentforge_harness.tools.mcp.mcp_manager import MCPManager
 from agentforge_harness.tools.registry import create_default_registry
+from agentforge_harness.agent.steering_queue import SteeringQueue
 
 
 class Session:
@@ -66,6 +67,7 @@ class Session:
         self.mode: AgentMode = AgentMode.BUILD
         self._running: bool = False
         self._cancel_requested: bool = False
+        self._steering_queue: SteeringQueue = SteeringQueue()
 
     # ------------------------------------------------------------------
     # Introspection accessors (read-only)
@@ -129,6 +131,21 @@ class Session:
         """Clear any previously requested cancellation."""
         self._cancel_requested = False
 
+    def prompt(self, text: str, mode: str = "follow_up") -> None:
+        """Enqueue a message to be injected at the next safe checkpoint.
+
+        mode="steer"     — injected after the next tool batch completes.
+        mode="follow_up" — injected at the natural turn end (no tool calls).
+        """
+        if mode == "steer":
+            self._steering_queue.push_steer(text)
+        else:
+            self._steering_queue.push_follow_up(text)
+
+    def pop_latest_follow_up_message(self) -> str | None:
+        """Pop the next follow-up message from the queue, or None if empty."""
+        return self._steering_queue.pop_follow_up()
+
     async def initialize(self) -> None:
         await self.mcp_manager.initialize()
         self.mcp_manager.register_tools(self.tool_registry)
@@ -161,6 +178,7 @@ class Session:
         todo_tool = self.tool_registry.get("todos")
         if todo_tool and hasattr(todo_tool, "_todos"):
             getattr(todo_tool, "_todos").clear()
+        self._steering_queue.clear()
 
     def set_thinking_level(self, level: ThinkingLevel) -> None:
         self.config.model.thinking = level
