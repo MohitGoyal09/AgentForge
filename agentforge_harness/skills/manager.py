@@ -102,6 +102,33 @@ class SkillManager:
     def unload_skill(self, name: str) -> bool:
         return self._loaded.pop(name, None) is not None
 
+    def get_active_allowed_tools(self, active_skills: list[str]) -> list[str] | None:
+        """Return the union of allowed_tools for all active skills that specify it.
+
+        Returns None if no active skill specifies allowed_tools (= no restriction).
+        Returns an empty list [] if at least one skill specifies allowed_tools=[]
+        (= nothing allowed beyond builtins).
+        """
+        any_restriction = False
+        union: list[str] = []
+        seen: set[str] = set()
+
+        for name in active_skills:
+            metadata = self._available.get(name)
+            if metadata is None:
+                continue
+            if metadata.allowed_tools is None:
+                continue
+            any_restriction = True
+            for tool in metadata.allowed_tools:
+                if tool not in seen:
+                    seen.add(tool)
+                    union.append(tool)
+
+        if not any_restriction:
+            return None
+        return union
+
     def get_active_skill_bodies(self, active_skills: list[str]) -> dict[str, str]:
         bodies: dict[str, str] = {}
         for name in active_skills:
