@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -113,6 +114,32 @@ class SessionTreeStore:
         """Convenience: read_all then reconstruct_messages."""
         entries = self.read_all(session_id)
         return reconstruct_messages(entries, leaf_id=leaf_id)
+
+    def write_all(self, session_id: str, entries: list[SessionEntry]) -> None:
+        """Atomically overwrite the JSONL file with *entries*.
+
+        Writes to a temp file in the same directory then os.replace so that
+        concurrent readers always see a complete file.  Sets mode 0o600.
+        """
+        file_path = self._path(session_id)
+        fd, tmp_name = tempfile.mkstemp(
+            dir=self._dir,
+            prefix=f".{session_id}.",
+            suffix=".tmp",
+            text=True,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fp:
+                for entry in entries:
+                    fp.write(json.dumps(entry.to_dict(), default=str))
+                    fp.write("\n")
+                fp.flush()
+                os.fsync(fp.fileno())
+            os.replace(tmp_name, file_path)
+            os.chmod(file_path, 0o600)
+        finally:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
 
     def list_session_ids(self) -> list[str]:
         """Return the stems of all *.jsonl files in the store directory."""
