@@ -154,6 +154,9 @@ class Session:
         if todo_tool and hasattr(todo_tool, "_todos"):
             getattr(todo_tool, "_todos").clear()
 
+    def set_thinking_level(self, level: ThinkingLevel) -> None:
+        self.config.model.thinking = level
+
     def set_mode(self, mode: AgentMode) -> None:
         if self.mode == mode:
             return
