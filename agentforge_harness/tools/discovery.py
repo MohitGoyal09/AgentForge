@@ -31,6 +31,13 @@ class ToolDiscoveryManager:
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
 
+        # Ensure the harness package root is importable so user tools can use
+        # either `from agentforge_harness.tools.base import ...` or the legacy
+        # short form `from tools.base import ...`.
+        pkg_root = str(Path(__file__).parent.parent.parent)
+        if pkg_root not in sys.path:
+            sys.path.insert(0, pkg_root)
+
         spec.loader.exec_module(module)
         return module
 

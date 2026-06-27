@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from tools.base import Tool, ToolInvocation, ToolResult, ToolKind
+from agentforge_harness.tools.base import Tool, ToolInvocation, ToolResult, ToolKind
 
 
 class TestToolParams(BaseModel):
