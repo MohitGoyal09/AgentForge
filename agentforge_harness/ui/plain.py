@@ -1188,3 +1188,7 @@ class TUI:
 - Use `/plan` to design a plan before implementing with `/build`
 """
         self.console.print(Markdown(help_text))
+
+
+# Alias for explicit import from the plain renderer path
+PlainTUI = TUI

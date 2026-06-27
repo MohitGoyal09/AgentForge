@@ -39,6 +39,7 @@ dependencies = [
     "tomli; python_version < '3.11'",
     "ddgs",
     "fastmcp",
+    "textual>=1.0",
 ]
 
 [project.urls]

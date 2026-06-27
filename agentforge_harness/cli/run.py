@@ -9,7 +9,7 @@ from agentforge_harness.cli.doctor import build_doctor_report, print_doctor_repo
 from agentforge_harness.cli.report import build_session_report, format_session_report, report_to_json
 from agentforge_harness.cli.setup import run_setup
 from agentforge_harness.config.loader import load_config
-from agentforge_harness.ui.tui import get_console
+from agentforge_harness.ui.plain import get_console
 
 console = get_console()
 
@@ -116,7 +116,8 @@ def report(session_id: str | None, json_output: bool, data_dir: Path | None) -> 
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Current working directory",
 )
-def run(prompt: str | None, cwd: Path | None) -> None:
+@click.option("--plain", is_flag=True, default=False, help="Use plain Rich renderer (no Textual TUI).")
+def run(prompt: str | None, cwd: Path | None, plain: bool = False) -> None:
     """Start AgentForge in interactive or single-prompt mode."""
     try:
         config = load_config(cwd)

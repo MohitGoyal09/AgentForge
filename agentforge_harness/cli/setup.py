@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich import box
 from agentforge_harness.config.loader import get_config_dir
-from agentforge_harness.ui.tui import get_console
+from agentforge_harness.ui.plain import get_console
 
 PROVIDERS = ("openrouter", "openai", "anthropic", "custom")
 PROVIDER_LABELS = {
