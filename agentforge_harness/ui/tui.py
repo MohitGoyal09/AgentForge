@@ -1177,6 +1177,8 @@ class TUI:
 - `/resume <session_id>` - Resume a saved session
 - `/branch` - Show branchable messages; `/branch <id>` rewinds to that message
 - `/rewind <id>` - Alias for `/branch <id>`
+- `/steer <message>` - Queue a steering prompt to be injected at the next tool checkpoint
+- `/follow-up <message>` - Queue a follow-up message to be sent after the current turn ends
 
 ## Tips
 

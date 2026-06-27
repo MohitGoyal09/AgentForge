@@ -299,7 +299,59 @@ def test_registry_known_commands_complete():
         "/mcp", "/name", "/save", "/sessions", "/resume", "/checkpoint",
         "/checkpoints", "/restore", "/new", "/reload", "/version", "/retry",
         "/history", "/report", "/plan", "/build", "/todos", "/stats",
-        "/export", "/branch", "/rewind",
+        "/export", "/branch", "/rewind", "/steer", "/follow-up",
     }
     missing = required - known
     assert not missing, f"Commands missing from registry: {missing}"
+
+
+# ---------------------------------------------------------------------------
+# /steer and /follow-up
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_steer_command_enqueues(tmp_path):
+    session = await _make_session(tmp_path)
+    config = Config(cwd=tmp_path, model_name="test/model")
+    ctx = CommandContext(session=session, config=config, agent=None)
+    result = await get_registry().dispatch("/steer", "focus on the auth module", ctx)
+    assert result.handled is True
+    assert result.notice is not None
+    assert session._steering_queue.pop_steer() == "focus on the auth module"
+
+
+@pytest.mark.asyncio
+async def test_follow_up_command_enqueues(tmp_path):
+    session = await _make_session(tmp_path)
+    config = Config(cwd=tmp_path, model_name="test/model")
+    ctx = CommandContext(session=session, config=config, agent=None)
+    result = await get_registry().dispatch("/follow-up", "also check the logs", ctx)
+    assert result.handled is True
+    assert session.pop_latest_follow_up_message() == "also check the logs"
+
+
+@pytest.mark.asyncio
+async def test_steer_without_session_returns_error(tmp_path):
+    config = Config(cwd=tmp_path, model_name="test/model")
+    ctx = CommandContext(session=None, config=config, agent=None)
+    result = await get_registry().dispatch("/steer", "text", ctx)
+    assert result.error is not None
+
+
+@pytest.mark.asyncio
+async def test_steer_without_argument_returns_error(tmp_path):
+    session = await _make_session(tmp_path)
+    config = Config(cwd=tmp_path, model_name="test/model")
+    ctx = CommandContext(session=session, config=config, agent=None)
+    result = await get_registry().dispatch("/steer", "", ctx)
+    assert result.error is not None
+
+
+@pytest.mark.asyncio
+async def test_follow_up_without_argument_returns_error(tmp_path):
+    session = await _make_session(tmp_path)
+    config = Config(cwd=tmp_path, model_name="test/model")
+    ctx = CommandContext(session=session, config=config, agent=None)
+    result = await get_registry().dispatch("/follow-up", "", ctx)
+    assert result.error is not None
