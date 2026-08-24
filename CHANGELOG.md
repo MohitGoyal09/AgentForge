@@ -4,6 +4,7 @@
 
 ### Added
 
+- Optional no-key Parallel Search MCP support over Streamable HTTP, with configuration and privacy guidance.
 - Multi-provider model configuration for OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible endpoints.
 - Anthropic client adapter with message and tool-call conversion.
 - Setup wizard prompts for provider, model, and base URL.

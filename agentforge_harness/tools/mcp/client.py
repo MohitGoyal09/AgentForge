@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 from pathlib import Path
@@ -6,10 +7,16 @@ from typing import Any
 from agentforge_harness.config.config import MCPServerConfig
 from enum import Enum
 from fastmcp import Client
-from fastmcp.client.transports import SSETransport, StdioTransport
+from fastmcp.client.transports import (
+    SSETransport,
+    StdioTransport,
+    StreamableHttpTransport,
+)
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+PARALLEL_SEARCH_MCP_URL = "https://search.parallel.ai/mcp"
 
 
 class MCPServerStatus(str, Enum):
@@ -41,7 +48,9 @@ class MCPClient:
     def tools(self) -> list[MCPToolInfo]:
         return list(self._tools.values())
 
-    def _create_transport(self) -> StdioTransport | SSETransport:
+    def _create_transport(
+        self,
+    ) -> StdioTransport | SSETransport | StreamableHttpTransport:
         if self.config.command:
             env = os.environ.copy()
             env.update(self.config.env)
@@ -53,8 +62,10 @@ class MCPClient:
                 cwd=str(self.config.cwd or self.cwd),
                 log_file=Path(os.devnull),
             )
-        else:
-            return SSETransport(url=self.config.url)
+        if self.config.url == PARALLEL_SEARCH_MCP_URL:
+            return StreamableHttpTransport(url=self.config.url)
+
+        return SSETransport(url=self.config.url)
 
     async def connect(self) -> None:
         if self.status == MCPServerStatus.CONNECTED:
@@ -133,11 +144,19 @@ class MCPClient:
 
         result = await self._client.call_tool(tool_name, arguments)
 
-        output = []
-        for item in result.content:
-            if hasattr(item, "text"):
-                output.append(item.text)
-            else:
-                output.append(str(item))
+        # Keep the long-standing public return contract for direct callers and
+        # MCPTool. Parallel can repeat its JSON payload in both representations,
+        # so prefer the structured form there and use text only as a fallback.
+        structured = getattr(result, "structured_content", None)
+        if self.config.url == PARALLEL_SEARCH_MCP_URL and structured is not None:
+            output = json.dumps(structured)
+        else:
+            output_parts = []
+            for item in result.content:
+                if hasattr(item, "text"):
+                    output_parts.append(item.text)
+                else:
+                    output_parts.append(str(item))
+            output = "\n".join(output_parts)
 
-        return {"output": "\n".join(output), "is_error": result.is_error}
+        return {"output": output, "is_error": result.is_error}

@@ -30,11 +30,14 @@ class MCPTool(Tool):
     @property
     def schema(self) -> dict[str, Any]:
         input_schema = self._tool_info.input_schema or {}
-        return  {
+        schema = {
             'type' : 'object',
             'properties' : input_schema.get('properties' , {}),
             'required' : input_schema.get('required' , []),
         }
+        if 'additionalProperties' in input_schema:
+            schema['additionalProperties'] = input_schema['additionalProperties']
+        return schema
 
 
     def is_mutating(self, params) -> bool:
@@ -46,22 +49,31 @@ class MCPTool(Tool):
                 self._tool_info.name,
                 invocation.params,
             )
-            # BUG B fix: fastmcp returns a CallToolResult dataclass, not a dict.
-            # Extract text content from content blocks robustly.
-            content_blocks = getattr(result, 'content', None) or []
-            text_parts = [
-                getattr(block, 'text', '')
-                for block in content_blocks
-                if hasattr(block, 'text')
-            ]
-            if text_parts:
-                output = ''.join(text_parts)
+            if isinstance(result, dict):
+                # MCPClient has always exposed this small dictionary contract.
+                output = str(result.get("output", ""))
+                is_error = bool(result.get("is_error", False))
             else:
-                # Fall back to data or structured_content attributes
-                data = getattr(result, 'data', None)
-                structured = getattr(result, 'structured_content', None)
-                output = str(data) if data is not None else str(structured) if structured is not None else ''
-            is_error = bool(getattr(result, 'is_error', False))
+                # Retain compatibility with custom clients returning FastMCP's
+                # CallToolResult directly.
+                content_blocks = getattr(result, "content", None) or []
+                text_parts = [
+                    getattr(block, "text", "")
+                    for block in content_blocks
+                    if hasattr(block, "text")
+                ]
+                if text_parts:
+                    output = "".join(text_parts)
+                else:
+                    data = getattr(result, "data", None)
+                    structured = getattr(result, "structured_content", None)
+                    output = (
+                        str(data)
+                        if data is not None
+                        else str(structured) if structured is not None else ""
+                    )
+                is_error = bool(getattr(result, "is_error", False))
+
 
             if is_error:
                 return ToolResult.error_result(output)

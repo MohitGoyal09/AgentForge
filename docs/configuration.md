@@ -163,6 +163,23 @@ startup_timeout_sec = 10
 
 MCP tools are registered with `server__tool` names to avoid collisions.
 
+Parallel Search is an optional Streamable HTTP server. It is disabled unless you
+add this entry, and its default endpoint does not require an account or API key:
+
+```toml
+[mcp_servers.parallel-search]
+enabled = true
+url = "https://search.parallel.ai/mcp"
+startup_timeout_sec = 10
+```
+
+The hosted server exposes `web_search` and `web_fetch`. Search calls send the
+user-provided objective and search queries to Parallel; fetch calls send the
+requested URLs. Only pass arguments advertised by each tool schema: for example,
+`web_search` accepts `objective` and `search_queries`, not a remote result-limit
+argument. Apply any result limit locally after the response. See the [Parallel
+Search MCP documentation](https://docs.parallel.ai/integrations/mcp/search-mcp).
+
 ## Validation
 
 Run:
