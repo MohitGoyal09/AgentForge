@@ -1,0 +1,6 @@
+challenge_id,forecast_id,revision_id,version,submitted_at,p_bearish,p_neutral,p_bullish,vector_provenance,receipt_id,evidence_budget_tool_calls,tool_calls_used,cited_event_seqs,recovery_event_seqs,label,brier_unadjusted,adjustment
+GC-A,fc-GC-A,,1,2026-03-02T13:05:00+00:00,0.3,0.3,0.4,submitted,rcpt-GC-A-v1,15,2,2;3,,initial,0.5400,
+GC-A,fc-GC-A,rev-GC-A-1,2,2026-03-02T15:40:00+00:00,0.15,0.25,0.6,submitted,rcpt-GC-A-v2,15,3,2;5,,new,0.2450,
+GC-A,fc-GC-A,rev-GC-A-2,3,2026-03-02T17:20:00+00:00,0.2,0.2,0.6,submitted,rcpt-GC-A-v3,15,5,2;5,7;8;9;10,recovery_only,0.2400,
+GC-B,fc-GC-B,,1,2026-03-03T13:05:00+00:00,0.2,0.2,0.6,reconstructed,rcpt-GC-B-v1,15,6,13,,initial,1.0400,
+GC-B,fc-GC-B,rev-GC-B-1,2,2026-03-03T14:30:00+00:00,0.1,0.5,0.4,submitted,rcpt-GC-B-v2,15,6,13,,previously_seen,0.4200,
