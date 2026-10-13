@@ -569,6 +569,10 @@ async def _h_restore(argument: str, ctx: CommandContext) -> CommandResult:
     if not snapshot:
         return CommandResult(error=f"Checkpoint not found: {argument}")
     ctx.session.restore_snapshot(snapshot)
+    ctx.session.record_event(
+        "checkpoint_restored",
+        {"checkpoint_id": argument, "restored_event_sequence": snapshot.event_sequence},
+    )
     return CommandResult(notice=f"Restored checkpoint: {argument}")
 
 
