@@ -10,7 +10,7 @@ No network, no LLM calls, no HA API calls, no real GC price data. Timestamps are
 
 - `build_example.py`: stdlib only. Writes the three files below and prints a summary. `python build_example.py --check` also runs the self-check.
 - `events.jsonl`: one synthetic session in the AgentForge event envelope (`schema_version`, `session_id`, `turn`, `sequence`, `type`, `timestamp`, `payload`) as written by `PersistenceManager.append_event`. Sequence numbers rise strictly. Event types: `run_config`, `source_retrieved`, `forecast_submitted`, `challenge_resolved`, and the recovery events `agent_error`, `retry`, `compaction`, `checkpoint_restored`. `agent_error` is the string the harness already uses for errors.
-- `versions.csv`: one row per submitted version. The `adjustment` column is empty on purpose. It is kept apart from `brier_unadjusted`. `cited_event_seqs` and `recovery_event_seqs` are `;` separated. `tool_calls_used` counts `source_retrieved`, `agent_error` and `retry` events up to that submission.
+- `versions.csv`: one row per submitted version. The `adjustment` column is empty on purpose. It is kept apart from `brier_unadjusted`. `cited_event_seqs` and `recovery_event_seqs` are `;` separated. `tool_calls_used` counts `source_retrieved`, `agent_error` and `retry` events per challenge: those after the previous `challenge_resolved` event (or session start) up to that submission. The budget is per challenge.
 - `challenges.csv`: one row per challenge, with the synthetic outcome and the final version's Brier score.
 
 ## The story
@@ -48,4 +48,3 @@ The first version of a challenge is `initial`. If nothing is cited and there are
 - Citations are agent-reported. They show what the agent said it used, not causal proof that the evidence drove the revision.
 - This tests record support, not forecast quality. The Brier scores come from two made-up outcomes.
 - The receipts are synthetic stand-ins for HA submission receipts.
-- The real `/restore` command resets the session sequence counter to the checkpoint's value, so real logs can reuse sequence numbers after a restore. This example keeps sequences strictly rising.

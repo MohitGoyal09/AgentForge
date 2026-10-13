@@ -206,7 +206,12 @@ def build_rows(events: list[dict]) -> tuple[list[dict], list[dict]]:
         else:
             label, _, recovery = classify(events, prev_of[cid], e)
         prev_of[cid] = e
-        used = sum(1 for x in events if x["sequence"] <= e["sequence"] and x["type"] in TOOL_CALL_TYPES)
+        # Per-challenge count: tool calls after the previous challenge_resolved (or session
+        # start) up to and including this submission.
+        start = max((x["sequence"] for x in events
+                     if x["type"] == "challenge_resolved" and x["sequence"] < e["sequence"]), default=0)
+        used = sum(1 for x in events
+                   if start < x["sequence"] <= e["sequence"] and x["type"] in TOOL_CALL_TYPES)
         assert used <= budget["max_tool_calls"]
         pr = p["probabilities"]
         versions.append({
@@ -301,6 +306,8 @@ def self_check() -> None:
     assert ids == sorted(set(ids)) == sorted(CHALLENGES), "one row per challenge"
     assert [c["final_brier_unadjusted"] for c in challenges] == ["0.2400", "0.4200"]
     assert all(v["adjustment"] == "" for v in versions)
+    assert all(v["tool_calls_used"] <= v["evidence_budget_tool_calls"] for v in versions)
+    assert [v["tool_calls_used"] for v in versions] == [2, 3, 5, 1, 1]
     print("self_check ok")
 
 
