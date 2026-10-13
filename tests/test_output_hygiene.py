@@ -75,6 +75,33 @@ def test_clean_tool_result_truncates_model_visible_fields():
     assert cleaned.metadata["output_hygiene"]["truncated_fields"]["output"] > 0
 
 
+def test_clean_tool_result_sets_truncated_flag_when_output_is_cut():
+    result = ToolResult.success_result(
+        output="\n".join(f"line {i}" for i in range(200)),
+        truncated=False,
+    )
+
+    cleaned = clean_tool_result(
+        result,
+        model_name="test/test-model",
+        max_output_tokens=20,
+    )
+
+    assert cleaned.truncated is True
+
+
+def test_clean_tool_result_keeps_truncated_flag_when_nothing_is_cut():
+    result = ToolResult.success_result(output="short", truncated=False)
+
+    cleaned = clean_tool_result(
+        result,
+        model_name="test/test-model",
+        max_output_tokens=20,
+    )
+
+    assert cleaned.truncated is False
+
+
 async def test_registry_cleans_output_before_redaction_and_hooks(tmp_path: Path):
     config = Config(
         cwd=tmp_path,
@@ -121,3 +148,20 @@ async def test_registry_can_disable_output_hygiene(tmp_path: Path):
     assert "\x1b" in result.output
     assert "\x00" in result.output
     assert "output_hygiene" not in result.metadata
+
+
+def test_clean_tool_result_sets_truncated_flag_when_output_is_cut():
+    result = ToolResult.success_result(output="word " * 500)
+
+    cleaned = clean_tool_result(result, model_name="gpt-4o", max_output_tokens=20)
+
+    assert cleaned.metadata["output_hygiene"]["truncated_fields"]
+    assert cleaned.truncated is True
+
+
+def test_clean_tool_result_keeps_truncated_flag_when_output_fits():
+    result = ToolResult.success_result(output="short")
+
+    cleaned = clean_tool_result(result, model_name="gpt-4o", max_output_tokens=20)
+
+    assert cleaned.truncated is False

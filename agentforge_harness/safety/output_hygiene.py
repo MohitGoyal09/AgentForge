@@ -107,6 +107,9 @@ def clean_tool_result(
         )
         updates[field_name] = truncated_value
 
+    if report.truncated_fields:
+        updates["truncated"] = True
+
     cleaned_artifacts, artifacts_report = clean_value(result.artifacts)
     report.merge(artifacts_report)
     updates["artifacts"] = cleaned_artifacts
