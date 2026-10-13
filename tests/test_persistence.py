@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -126,6 +126,14 @@ class TestPersistenceManager:
         lines = events_path.read_text().strip().split("\n")
         assert len(lines) == 2
         assert json.loads(lines[0])["type"] == "tool_call"
+
+    def test_event_timestamp_is_timezone_aware_utc(self, tmp_path: Path):
+        pm = PersistenceManager(data_dir=tmp_path)
+        pm.append_event("test_session_123", turn=1, sequence=1, event_type="tool_call", payload={})
+
+        line = (tmp_path / "events" / "test_session_123.jsonl").read_text().strip()
+        stamp = datetime.fromisoformat(json.loads(line)["timestamp"])
+        assert stamp.utcoffset() == timedelta(0)
 
     def test_invalid_session_id_raises_error(self, tmp_path: Path):
         pm = PersistenceManager(data_dir=tmp_path)
