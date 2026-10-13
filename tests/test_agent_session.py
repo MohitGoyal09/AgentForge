@@ -144,3 +144,31 @@ class TestSessionBasics:
         snapshot = session.create_snapshot()
 
         assert snapshot.mode == "plan"
+
+
+def test_event_sequence_stays_strictly_increasing_across_restore(tmp_path):
+    import json
+
+    from agentforge_harness.agent.persistence import PersistenceManager
+    from agentforge_harness.context.manager import ContextManager
+
+    config = Config(cwd=Path("/tmp"), model_name="test/test-model")
+    session = Session(config, persistence=PersistenceManager(data_dir=tmp_path))
+    session.context_manager = ContextManager(
+        config=config,
+        tools=session.tool_registry.get_tools(mode=session.mode),
+        skills=[],
+        mode=session.mode,
+    )
+    for _ in range(3):
+        session.record_event("tool_call_start", {})
+    checkpoint = session.create_snapshot()
+    for _ in range(2):
+        session.record_event("tool_call_start", {})
+
+    session.restore_snapshot(checkpoint)
+    session.record_event("checkpoint_restored", {})
+
+    lines = (tmp_path / "events" / f"{session.session_id}.jsonl").read_text().splitlines()
+    seqs = [json.loads(line)["sequence"] for line in lines]
+    assert seqs == [1, 2, 3, 4, 5, 6]
