@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -244,7 +244,7 @@ class PersistenceManager:
             "turn": turn,
             "sequence": sequence,
             "type": event_type,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": payload,
         }
 

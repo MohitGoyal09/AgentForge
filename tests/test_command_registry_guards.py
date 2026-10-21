@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 # Import the private handler functions directly
-from agentforge_harness.cli.command_registry import _h_stats, _h_report
+from agentforge_harness.cli.command_registry import _h_report, _h_restore, _h_stats
 
 
 def _make_ctx(context_manager=None) -> MagicMock:
@@ -75,3 +75,31 @@ async def test_stats_with_no_session_returns_error():
     result = await _h_stats("", ctx)
     assert result.error is not None
     assert "session" in result.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_restore_records_checkpoint_restored_event():
+    """/restore appends a checkpoint_restored event after a successful restore."""
+    snapshot = MagicMock()
+    snapshot.event_sequence = 7
+    ctx = _make_ctx()
+    ctx.session.persistence.load_checkpoint.return_value = snapshot
+
+    result = await _h_restore("cp-1", ctx)
+
+    assert result.error is None
+    ctx.session.restore_snapshot.assert_called_once_with(snapshot)
+    ctx.session.record_event.assert_called_once_with(
+        "checkpoint_restored", {"checkpoint_id": "cp-1", "restored_event_sequence": 7}
+    )
+
+
+@pytest.mark.asyncio
+async def test_restore_missing_checkpoint_records_no_event():
+    ctx = _make_ctx()
+    ctx.session.persistence.load_checkpoint.return_value = None
+
+    result = await _h_restore("nope", ctx)
+
+    assert result.error is not None
+    ctx.session.record_event.assert_not_called()

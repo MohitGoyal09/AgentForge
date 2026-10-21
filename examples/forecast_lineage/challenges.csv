@@ -1,0 +1,3 @@
+challenge_id,asset,deadline,outcome,outcome_is_synthetic,final_forecast_id,final_revision_id,final_brier_unadjusted
+GC-A,GC,2026-03-02T21:00:00+00:00,bullish,true,fc-GC-A,rev-GC-A-2,0.2400
+GC-B,GC,2026-03-03T21:00:00+00:00,neutral,true,fc-GC-B,rev-GC-B-1,0.4200

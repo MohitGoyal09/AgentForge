@@ -285,7 +285,8 @@ class Session:
         self.created_at = snapshot.created_at
         self.updated_at = datetime.now()
         self._turn_count = snapshot.turn_count
-        self._event_sequence = snapshot.event_sequence
+        # Never move backwards: the event log must stay strictly increasing across a restore.
+        self._event_sequence = max(self._event_sequence, snapshot.event_sequence)
         self.active_skills = list(snapshot.active_skills)
         try:
             self.mode = AgentMode(snapshot.mode)
