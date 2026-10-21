@@ -10,7 +10,7 @@ No network, no LLM calls, no HA API calls, no real GC price data. Timestamps are
 
 - `build_example.py`: stdlib only. Writes the three files below and prints a summary. `python build_example.py --check` also runs the self-check.
 - `events.jsonl`: one synthetic session in the AgentForge event envelope (`schema_version`, `session_id`, `turn`, `sequence`, `type`, `timestamp`, `payload`) as written by `PersistenceManager.append_event`. Sequence numbers rise strictly. Event types: `run_config`, `source_retrieved`, `forecast_submitted`, `challenge_resolved`, and the recovery events `agent_error`, `retry`, `compaction`, `checkpoint_restored`. `agent_error` is the string the harness already uses for errors.
-- `versions.csv`: one row per submitted version. The `adjustment` column is empty on purpose. It is kept apart from `brier_unadjusted`. `cited_event_seqs` and `recovery_event_seqs` are `;` separated. `tool_calls_used` counts `source_retrieved`, `agent_error` and `retry` events per challenge: those after the previous `challenge_resolved` event (or session start) up to that submission. The budget is per challenge.
+- `versions.csv`: one row per submitted version. Four columns make each row's certainty explicit: `submission_status` (`synthetic_receipt` here, `local_write_only` for a real-log export, `submitted` only with a real platform receipt), `label_basis` (`publish_time`, `retrieval_time_proxy`, or empty when no fresh source was cited), `hash_basis` (`full_body` here, `logged_output` for a real-log export) and `source_truncated` (`true` when any cited source was cut short). The `adjustment` column is empty on purpose. It is kept apart from `brier_unadjusted`. `cited_event_seqs` and `recovery_event_seqs` are `;` separated. `tool_calls_used` counts `source_retrieved`, `agent_error` and `retry` events per challenge: those after the previous `challenge_resolved` event (or session start) up to that submission. The budget is per challenge.
 - `challenges.csv`: one row per challenge, with the synthetic outcome and the final version's Brier score.
 
 ## The story
@@ -26,18 +26,24 @@ When only a direction and a confidence are known, the chosen direction gets `con
 
 Each revision is compared with the previous submission of the same challenge.
 
-- A cited source is new if its `publish_time` is later than the previous submission time AND its `sha256` appears in no event before the previous submission.
+- A cited source is fresh if its `sha256` appears in no event before the previous submission.
+- A fresh source is `new` only if its `publish_time` is later than the previous submission time. A fresh source published earlier, or with no known publish time, was only newly retrieved.
 - Recovery events are `agent_error`, `retry`, `compaction` and `checkpoint_restored` with a sequence between the previous and the current submission.
 
-| New cited source | Recovery events | Label |
+| Fresh cited source | Recovery events | Label |
 |---|---|---|
-| yes | yes | `mixed` |
-| yes | no | `new` |
+| yes (any) | yes | `mixed` |
+| newly published | no | `new` |
+| newly retrieved only | no | `newly_retrieved` |
 | no (only old sources) | yes | `recovery_only` |
 | no (only old sources) | no | `previously_seen` |
 | nothing cited | no | `unknown` |
 
-The first version of a challenge is `initial`. If nothing is cited and there are recovery events, the label is `recovery_only`.
+The first version of a challenge is `initial`. If nothing is cited and there are recovery events, the label is `recovery_only`. `label_basis` says which time decided freshness: `retrieval_time_proxy` means at least one fresh source had no publish time, so the row cannot claim the evidence was newly published.
+
+## Real logs: from_agentforge_log.py
+
+`python from_agentforge_log.py <events.jsonl> <out_dir>` converts a real AgentForge event log into the same `versions.csv` columns, plus `gaps.md` for fields the log cannot fill. A real log has no source publish time, no platform submission and no receipt, so its rows say so: `submission_status = local_write_only`, `vector_provenance = unknown`, `hash_basis = logged_output`, and a fresh source is at most `newly_retrieved` with `label_basis = retrieval_time_proxy`. An old row of an oldest-first CSV, fetched after the previous forecast and cut short, is therefore `newly_retrieved` with `source_truncated = true`, never `new`.
 
 ## Brier score (unadjusted)
 

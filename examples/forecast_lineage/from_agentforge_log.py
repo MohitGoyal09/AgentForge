@@ -58,13 +58,14 @@ def convert(raw: list[dict]) -> tuple[list[dict], list[str]]:
             web_fetch_seqs.append(seq)
         if p["name"] == "web_fetch" and p["success"]:
             src = {"seq": seq, "url": args.get("url", ""), "time": when}
-            cut = p.get("metadata", {}).get("output_hygiene", {}).get("truncated_fields")
-            if p.get("truncated") or cut:
+            cut = bool(p.get("truncated") or p.get("metadata", {}).get("output_hygiene", {}).get("truncated_fields"))
+            if cut:
                 truncated.append(src)
             sources.append(src)
-            # publish_time is unknown; the retrieval time stands in for it (the proxy rule).
+            # A real log has no publish time, so classify can only say "newly retrieved".
             norm.append({"sequence": seq, "type": "source_retrieved", "timestamp": when, "payload": {
-                "publish_time": when, "sha256": hashlib.sha256(p["output"].encode()).hexdigest()}})
+                "publish_time": None, "truncated": cut,
+                "sha256": hashlib.sha256(p["output"].encode()).hexdigest()}})
         elif p["name"] == "write_file" and p["success"] and fnmatch.fnmatch(
                 PurePosixPath(args.get("path", "")).name, "forecast_v*.json"):
             try:
@@ -105,17 +106,19 @@ def convert(raw: list[dict]) -> tuple[list[dict], list[str]]:
         norm.append(sub)
         norm.sort(key=lambda x: x["sequence"])
         if cid in prev_of:
-            label, _, recovery = be.classify(norm, prev_of[cid], sub)
+            label, _, recovery, basis = be.classify(norm, prev_of[cid], sub)
         else:
-            label, recovery = "initial", []
+            label, recovery, basis = "initial", [], ""
         prev_of[cid] = sub
         rows.append({
             "challenge_id": cid, "forecast_id": "", "revision_id": "", "version": version,
             "submitted_at": when, "p_bearish": probs["bearish"], "p_neutral": probs["neutral"],
-            "p_bullish": probs["bullish"], "vector_provenance": "submitted", "receipt_id": "",
+            "p_bullish": probs["bullish"], "vector_provenance": "unknown",
+            "submission_status": "local_write_only", "receipt_id": "",
             "evidence_budget_tool_calls": "", "tool_calls_used": sum(1 for q in web_fetch_seqs if q <= seq),
             "cited_event_seqs": be.join(cited), "recovery_event_seqs": be.join(recovery),
-            "label": label, "brier_unadjusted": "", "adjustment": "",
+            "label": label, "label_basis": basis, "hash_basis": "logged_output",
+            "source_truncated": be.cited_truncated(norm, cited), "brier_unadjusted": "", "adjustment": "",
         })
 
     rows_note = f"{len(rows)} version row(s) from {len(sources)} successful web_fetch source(s)."
@@ -124,18 +127,20 @@ def convert(raw: list[dict]) -> tuple[list[dict], list[str]]:
         "## Fields left blank for every row", "",
         "- `publish_time` (source): web_fetch output and URL carry no publish time. Not stored in the CSV; "
         "sources: " + (", ".join(f"seq {x['seq']} {x['url']}" for x in sources) or "none") + ".",
-        "- `label`: because publish_time is unknown, a cited source counts as new by a proxy: it was first "
-        "retrieved after the previous submission AND its sha256 was unseen before then. This overstates "
-        "novelty (a re-fetched page with a trivial change counts) and cannot tell a late-published source "
-        "from an early-published one fetched late.",
+        "- `label`: publish_time is unknown, so a cited source never counts as `new`. A source whose sha256 "
+        "was unseen before the previous submission is labelled `newly_retrieved`, with "
+        "`label_basis = retrieval_time_proxy` in the row. This cannot tell a late-published source from an "
+        "early-published one fetched late.",
         "- `forecast_id`, `revision_id`, `receipt_id`: the log has no forecast_submitted event and no submission receipt.",
+        "- `submission_status`: always `local_write_only`. The forecast was a local file write, not a platform submission.",
         "- `submitted_at`: time the write_file call completed, not a platform acceptance time.",
-        "- `vector_provenance`: always `submitted`; the log cannot say whether the agent reconstructed a vector.",
+        "- `vector_provenance`: always `unknown`; the log cannot say whether the agent reconstructed a vector.",
         "- `evidence_budget_tool_calls`: the budget exists only as prose in the prompt (agent_start message), not as an event.",
         "- `tool_calls_used`: all web_fetch completions (success or fail) up to the submission, cumulative "
         "for the whole session; the log has no challenge boundary and no count of other tools.",
         "- `brier_unadjusted`: outcome not known yet (no challenge_resolved event), so blank. `adjustment` stays blank.",
-        "- sha256: taken over the logged tool output text, which is what the model saw.",
+        "- sha256 (`hash_basis = logged_output`): taken over the logged tool output text, which is what the "
+        "model saw. `source_truncated = true` when any cited source in the row was cut short.",
         "- truncated fetch output: " + (
             "; ".join(f"seq {x['seq']} {x['url']}" for x in truncated)
             + ". The model saw only a cut-down body, and the hash covers that body."

@@ -95,3 +95,55 @@ def test_gaps_lists_hallucinated_url_and_unfilled_fields(tmp_path):
 def test_gaps_flags_truncated_fetch_output(tmp_path):
     _, gaps = _run(tmp_path)
     assert f"seq 8 {C}" in gaps.split("truncated", 1)[1]
+
+
+def test_rows_mark_proxy_and_unknown_states(tmp_path):
+    rows, _ = _run(tmp_path)
+    assert all(r["submission_status"] == "local_write_only" for r in rows)
+    assert all(r["vector_provenance"] == "unknown" for r in rows)
+    assert all(r["hash_basis"] == "logged_output" for r in rows)
+    assert [r["source_truncated"] for r in rows] == ["false", "true", "false"]
+    assert [r["label_basis"] for r in rows] == ["", "retrieval_time_proxy", ""]
+
+
+def _old_source_fixture() -> list[dict]:
+    """An old source first fetched after the previous forecast, with cut output, no recovery."""
+    events: list[dict] = []
+
+    def emit(type_: str, minute: int, payload: dict) -> None:
+        events.append({"schema_version": 1, "session_id": "s", "turn": 1, "sequence": len(events) + 1,
+                       "type": type_, "timestamp": f"2026-10-14T11:{minute:02d}:00+00:00", "payload": payload})
+
+    def fetch(cid: str, url: str, minute: int, output: str, cut: bool) -> None:
+        emit("tool_call_start", minute, {"call_id": cid, "name": "web_fetch", "arguments": {"url": url}})
+        emit("tool_call_complete", minute, {
+            "call_id": cid, "name": "web_fetch", "success": True, "output": output, "error": None,
+            "truncated": cut, "metadata": {"output_hygiene": {"truncated_fields": {"output": 9} if cut else {}}}})
+
+    def write(cid: str, version: int, urls: list[str], minute: int) -> None:
+        body = {"challenge_id": "GC-OLD", "version": version, "cited_urls": urls,
+                "probabilities": {"bearish": 0.3, "neutral": 0.3, "bullish": 0.4}}
+        emit("tool_call_start", minute, {"call_id": cid, "name": "write_file",
+                                         "arguments": {"path": f"forecast_v{version}.json", "content": json.dumps(body)}})
+        emit("tool_call_complete", minute, {"call_id": cid, "name": "write_file", "success": True,
+                                            "output": "ok", "error": None})
+
+    fetch("1", A, 1, "alpha", cut=False)
+    write("2", 1, [A], 2)
+    # 1979-era rows of an oldest-first CSV: old material, but first retrieved now.
+    fetch("3", B, 3, "1979-09-13,9.34\n... [tool output truncated by AgentForge]", cut=True)
+    write("4", 2, [B], 4)
+    return events
+
+
+def test_old_source_first_retrieved_after_forecast_is_not_new(tmp_path):
+    log = tmp_path / "events.jsonl"
+    log.write_text("".join(json.dumps(e) + "\n" for e in _old_source_fixture()))
+    _load().main([str(log), str(tmp_path / "out")])
+    with open(tmp_path / "out" / "versions.csv", newline="") as f:
+        rev = list(csv.DictReader(f))[1]
+    assert rev["label"] == "newly_retrieved"
+    assert rev["label_basis"] == "retrieval_time_proxy"
+    assert rev["source_truncated"] == "true"
+    assert rev["hash_basis"] == "logged_output"
+    assert rev["recovery_event_seqs"] == ""

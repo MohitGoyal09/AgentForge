@@ -34,9 +34,10 @@ CHALLENGES = {
 
 VERSION_COLUMNS = [
     "challenge_id", "forecast_id", "revision_id", "version", "submitted_at",
-    "p_bearish", "p_neutral", "p_bullish", "vector_provenance", "receipt_id",
+    "p_bearish", "p_neutral", "p_bullish", "vector_provenance", "submission_status", "receipt_id",
     "evidence_budget_tool_calls", "tool_calls_used", "cited_event_seqs",
-    "recovery_event_seqs", "label", "brier_unadjusted", "adjustment",
+    "recovery_event_seqs", "label", "label_basis", "hash_basis", "source_truncated",
+    "brier_unadjusted", "adjustment",
 ]
 CHALLENGE_COLUMNS = [
     "challenge_id", "asset", "deadline", "outcome", "outcome_is_synthetic",
@@ -61,10 +62,14 @@ def brier(probs: dict[str, float], outcome: str) -> float:
     return sum((probs[k] - (1.0 if k == outcome else 0.0)) ** 2 for k in CATEGORIES)
 
 
-def classify(events: list[dict], prev: dict, cur: dict) -> tuple[str, list[int], list[int]]:
+def classify(events: list[dict], prev: dict, cur: dict) -> tuple[str, list[int], list[int], str]:
     """Label `cur` against the previous submission `prev` of the same challenge.
 
-    Returns (label, new_cited_seqs, recovery_seqs).
+    A cited source whose hash is unseen before `prev` is `new` only when its
+    publish_time proves it appeared after `prev`. Otherwise it was only newly
+    retrieved. Returns (label, fresh_cited_seqs, recovery_seqs, label_basis), where
+    label_basis is `publish_time`, `retrieval_time_proxy` (a fresh source has no
+    publish_time) or "" (no fresh source).
     """
     by_seq = {e["sequence"]: e for e in events}
     prev_time = datetime.fromisoformat(prev["timestamp"])
@@ -74,28 +79,46 @@ def classify(events: list[dict], prev: dict, cur: dict) -> tuple[str, list[int],
         if e["sequence"] < prev["sequence"] and "sha256" in e["payload"]
     }
     cited = cur["payload"]["cited_event_seqs"]
-    new = []
+    new, retrieved, proxy = [], [], False
     for seq in cited:
         src = by_seq[seq]
         assert src["type"] == "source_retrieved" and seq < cur["sequence"], seq
         p = src["payload"]
-        if datetime.fromisoformat(p["publish_time"]) > prev_time and p["sha256"] not in seen:
+        if p["sha256"] in seen:
+            continue
+        published = p.get("publish_time")
+        if published is None:
+            proxy = True
+            retrieved.append(seq)
+        elif datetime.fromisoformat(published) > prev_time:
             new.append(seq)
+        else:
+            retrieved.append(seq)
+    fresh = sorted(new + retrieved)
+    basis = ("retrieval_time_proxy" if proxy else "publish_time") if fresh else ""
     recovery = [
         e["sequence"] for e in events
         if prev["sequence"] < e["sequence"] < cur["sequence"] and e["type"] in RECOVERY_TYPES
     ]
-    if new and recovery:
+    if fresh and recovery:
         label = "mixed"
     elif new:
         label = "new"
+    elif retrieved:
+        label = "newly_retrieved"
     elif recovery:
         label = "recovery_only"
     elif cited:
         label = "previously_seen"
     else:
         label = "unknown"
-    return label, new, recovery
+    return label, fresh, recovery, basis
+
+
+def cited_truncated(events: list[dict], cited: list[int]) -> str:
+    """"true" if any cited source's stored text was cut short, else "false"."""
+    by_seq = {e["sequence"]: e for e in events}
+    return "true" if any(by_seq[s]["payload"].get("truncated") for s in cited) else "false"
 
 
 class Session:
@@ -202,9 +225,9 @@ def build_rows(events: list[dict]) -> tuple[list[dict], list[dict]]:
         p, cid = e["payload"], e["payload"]["challenge_id"]
         assert datetime.fromisoformat(e["timestamp"]) <= datetime.fromisoformat(CHALLENGES[cid]["deadline"])
         if p["version"] == 1:
-            label, _, recovery = "initial", [], []
+            label, recovery, basis = "initial", [], ""
         else:
-            label, _, recovery = classify(events, prev_of[cid], e)
+            label, _, recovery, basis = classify(events, prev_of[cid], e)
         prev_of[cid] = e
         # Per-challenge count: tool calls after the previous challenge_resolved (or session
         # start) up to and including this submission.
@@ -218,10 +241,14 @@ def build_rows(events: list[dict]) -> tuple[list[dict], list[dict]]:
             "challenge_id": cid, "forecast_id": p["forecast_id"], "revision_id": p["revision_id"] or "",
             "version": p["version"], "submitted_at": e["timestamp"],
             "p_bearish": pr["bearish"], "p_neutral": pr["neutral"], "p_bullish": pr["bullish"],
-            "vector_provenance": p["vector_provenance"], "receipt_id": p["receipt"]["receipt_id"],
+            "vector_provenance": p["vector_provenance"],
+            "submission_status": "synthetic_receipt" if p["receipt"]["synthetic"] else "submitted",
+            "receipt_id": p["receipt"]["receipt_id"],
             "evidence_budget_tool_calls": budget["max_tool_calls"], "tool_calls_used": used,
             "cited_event_seqs": join(p["cited_event_seqs"]), "recovery_event_seqs": join(recovery),
-            "label": label, "brier_unadjusted": f4(brier(pr, outcomes[cid])), "adjustment": "",
+            "label": label, "label_basis": basis, "hash_basis": "full_body",
+            "source_truncated": cited_truncated(events, p["cited_event_seqs"]),
+            "brier_unadjusted": f4(brier(pr, outcomes[cid])), "adjustment": "",
         })
     challenges = []
     for cid, meta in CHALLENGES.items():
@@ -267,9 +294,9 @@ def self_check() -> None:
         return {"sequence": seq, "type": "forecast_submitted", "timestamp": ts("2026-01-01", when),
                 "payload": {"cited_event_seqs": cited}}
 
-    def src(seq: int, published: str, sha: str) -> dict:
+    def src(seq: int, published: str | None, sha: str) -> dict:
         return {"sequence": seq, "type": "source_retrieved", "timestamp": ts("2026-01-01", "09:00:00"),
-                "payload": {"publish_time": ts("2026-01-01", published), "sha256": sha}}
+                "payload": {"publish_time": published and ts("2026-01-01", published), "sha256": sha}}
 
     def err(seq: int) -> dict:
         return {"sequence": seq, "type": "retry", "timestamp": ts("2026-01-01", "11:00:00"), "payload": {}}
@@ -282,10 +309,17 @@ def self_check() -> None:
         "recovery_only": [old, first, err(3), sub(4, "12:00:00", [1])],
         "previously_seen": [old, first, sub(3, "12:00:00", [1])],
         "unknown": [old, first, sub(3, "12:00:00", [])],
+        # Published before the previous forecast but first fetched after it.
+        "newly_retrieved": [old, first, src(3, "08:30:00", "c"), sub(4, "12:00:00", [3])],
     }
     for expected, evs in fixtures.items():
         subs = [e for e in evs if e["type"] == "forecast_submitted"]
         assert classify(evs, subs[0], subs[1])[0] == expected, expected
+    assert classify(fixtures["new"], first, fixtures["new"][3])[3] == "publish_time"
+    assert classify(fixtures["newly_retrieved"], first, fixtures["newly_retrieved"][3])[3] == "publish_time"
+    # No publish time: never `new`, and the basis says it is a proxy.
+    nopub = [old, first, src(3, None, "d"), sub(4, "12:00:00", [3])]
+    assert classify(nopub, first, nopub[3])[0::3] == ("newly_retrieved", "retrieval_time_proxy")
     # Same sha as an earlier event is not "new" even if published later.
     dup = [old, first, src(3, "10:30:00", "a"), sub(4, "12:00:00", [3])]
     assert classify(dup, dup[1], dup[3])[0] == "previously_seen"
@@ -308,6 +342,9 @@ def self_check() -> None:
     assert all(v["adjustment"] == "" for v in versions)
     assert all(v["tool_calls_used"] <= v["evidence_budget_tool_calls"] for v in versions)
     assert [v["tool_calls_used"] for v in versions] == [2, 3, 5, 1, 1]
+    assert [v["label_basis"] for v in versions] == ["", "publish_time", "", "", ""]
+    assert all(v["submission_status"] == "synthetic_receipt" for v in versions)
+    assert all(v["hash_basis"] == "full_body" and v["source_truncated"] == "false" for v in versions)
     print("self_check ok")
 
 
