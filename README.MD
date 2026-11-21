@@ -5,10 +5,17 @@
 # AgentForge
 
 <p align="center">
+  <a href="https://github.com/MohitGoyal09/AgentForge/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/MohitGoyal09/AgentForge/actions/workflows/tests.yml/badge.svg"></a>
   <a href="https://pypi.org/project/agentforge-harness/"><img alt="PyPI" src="https://img.shields.io/pypi/v/agentforge-harness?color=3775a9"></a>
   <a href="https://pypi.org/project/agentforge-harness/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/agentforge-harness"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-green"></a>
   <a href="docs/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-ready-6aa6f8"></a>
+</p>
+
+An open-source terminal coding-agent harness in Python, built to study how coding agents are structured. Install with `pip install agentforge-harness`. Write-up: [I Built an Agentic Harness From Scratch](https://mohitx.in/blog/agentforge-agentic-harness).
+
+<p align="center">
+  <img src="assets/tui-welcome.svg" alt="AgentForge terminal UI welcome screen showing the logo, model, working directory, approval policy and build mode" width="90%">
 </p>
 
 AgentForge is a terminal-based AI coding-agent harness built in Python for learning how modern coding agents are structured. It is not just a chatbot wrapper: the project is organized around the core harness concerns that make coding agents reliable, inspectable, and safe.
@@ -982,4 +989,4 @@ In progress or planned:
 
 ## License
 
-MIT
+MIT (see [LICENSE](LICENSE)).
